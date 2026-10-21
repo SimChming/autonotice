@@ -2,11 +2,15 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import websocket from "@fastify/websocket";
+import fastifyStatic from "@fastify/static";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { BOT_QQ, healthResponseSchema, SERVICE_VERSION } from "@autonotice/shared";
 import type { Config } from "./config.js";
 import { createDatabase } from "./db/client.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerBindRoutes } from "./routes/bind.js";
+import { registerScheduleRoutes } from "./routes/schedules.js";
 import { OneBotClient } from "./onebot/client.js";
 import { registerOneBotWs } from "./onebot/ws.js";
 import { createAtBotHandler } from "./bot/handle.js";
@@ -80,6 +84,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
 
   registerAuthRoutes(app, { db, config });
   registerBindRoutes(app, { db, config });
+  registerScheduleRoutes(app, { db });
   hub.registerRoute(app);
   registerOneBotWs(app, {
     config,
@@ -111,6 +116,22 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
       time: new Date().toISOString(),
     });
   });
+
+  // 同源托管客户端构建产物（容器内 /repo/apps/client/dist）；SPA 路由回退 index.html
+  const clientDist = resolve(process.cwd(), "../client/dist");
+  if (existsSync(clientDist)) {
+    await app.register(fastifyStatic, { root: clientDist, wildcard: false });
+    app.setNotFoundHandler((request, reply) => {
+      if (
+        request.method === "GET" &&
+        !request.url.startsWith("/api/") &&
+        !request.url.startsWith("/onebot/")
+      ) {
+        return reply.sendFile("index.html");
+      }
+      return reply.code(404).send({ code: "not_found", message: "资源不存在" });
+    });
+  }
 
   return app;
 }

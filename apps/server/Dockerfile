@@ -19,12 +19,15 @@ COPY apps/server/package.json apps/server/
 COPY apps/client/package.json apps/client/
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter "@autonotice/server..."
+    pnpm install --frozen-lockfile
 
 COPY packages/shared packages/shared
 COPY apps/server apps/server
+COPY apps/client apps/client
 
-RUN pnpm --filter @autonotice/shared build && pnpm --filter @autonotice/server build
+RUN pnpm --filter @autonotice/shared build \
+    && pnpm --filter @autonotice/server build \
+    && pnpm --filter @autonotice/client build
 
 FROM node:20-slim AS runtime
 
@@ -35,6 +38,7 @@ WORKDIR /repo
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/packages/shared ./packages/shared
 COPY --from=build /repo/apps/server ./apps/server
+COPY --from=build /repo/apps/client/dist ./apps/client/dist
 
 WORKDIR /repo/apps/server
 EXPOSE 8080
