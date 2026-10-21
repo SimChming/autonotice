@@ -338,11 +338,11 @@ GET  /api/v1/admin/overview                 → 连接状态/配额/审计
 
 **任务**
 
-- [ ] `pipeline/fetcher.ts`：链接抓取（SSRF 私网拦截、2MB 上限、UA 伪装、Jina Reader 可选开关）
-- [ ] `pipeline/extract.ts`：LLM JSON 模式抽取日程（prompt 含 "json" 关键词；思考链关闭；单次合并「思考+结构化」，非法 JSON 才重调一次）
-- [ ] `pipeline/merge.ts`：与既有日程 LLM 比对去重（多群重复信息不重复建日程）
-- [ ] `scheduler/`：node-cron 到点扫描 `alerts` → WS 推送 + QQ 私聊兜底
-- [ ] `notify/hub.ts`：WS 连接管理（鉴权、断线重连、按 user\_id 定向）
+- [x] `pipeline/fetcher.ts`：链接抓取（SSRF 私网拦截、2MB 上限、UA 伪装、Jina Reader 可选开关）
+- [x] `pipeline/extract.ts`：LLM JSON 模式抽取日程（prompt 含 "json" 关键词；思考链关闭；单次合并「思考+结构化」，非法 JSON 才重调一次）
+- [x] `pipeline/merge.ts`：与既有日程 LLM 比对去重（多群重复信息不重复建日程）
+- [x] `scheduler/`：node-cron 到点扫描 `alerts` → WS 推送 + QQ 私聊兜底
+- [x] `notify/hub.ts`：WS 连接管理（鉴权、断线重连、按 user\_id 定向）
 
 **验收**：测试群发一条含明确截止时间的作业消息 → 60 秒内 `schedule_items` 出现新行且带群来源 → 模拟到点后 WS 客户端收到提醒 payload；重复发同一条消息不产生重复日程。
 
@@ -514,4 +514,7 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-22 Phase 3：服务器侧 ghcr 拉取长期卡住，部署改为 CI runner 先 `docker pull` 再 `docker save | gzip | ssh 'gunzip | docker load'`，deploy.sh 不再在服务器拉镜像。
 - 2026-10-22 Phase 3：NapCat OneBot 反向 WS 配置字段是 `enable`（不是 `enabled`），配置目录已挂载到 `./napcat/config` 固化；NapCat 重建后小号仍需扫码（快速登录偶发失效）。
 - 2026-10-22 Phase 3：auth/bind 实测通过（注册→登录→start→confirm），群内 @ 已收到固定回复，`messages`/`groups` 入库正常。
+- 2026-10-22 Phase 4：提醒调度用 node-cron 每 30 秒扫描，WS 离线时走后 QQ 私聊兜底；默认提醒时间 = due_at 前 30 分钟。
+- 2026-10-22 Phase 4：去重优先 LLM 判断，异常时回退「标题归一化 + 同截止日」确定性判定；实测重复消息未产生新行。
+- 2026-10-22 Phase 4：抽取仅对「已绑定用户」在群内的消息触发，避免全群消息都消耗 LLM；链接抓取失败不阻塞抽取。
 
