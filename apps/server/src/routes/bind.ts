@@ -1,0 +1,60 @@
+import type { FastifyInstance } from "fastify";
+import { bindConfirmRequestSchema, bindConfirmResponseSchema, bindStartRequestSchema, bindStartResponseSchema } from "@autonotice/shared";
+import type { Db } from "../db/client.js";
+import type { Config } from "../config.js";
+import { fail, requireUser } from "../auth/guard.js";
+import { confirmBind, startBind } from "../services/bind.js";
+
+interface BindRouteOptions {
+  db: Db;
+  config: Config;
+}
+
+export function registerBindRoutes(app: FastifyInstance, { db, config }: BindRouteOptions): void {
+  app.post("/api/v1/bind/start", async (request, reply) => {
+    const claims = await requireUser(request, reply);
+    if (!claims) {
+      return;
+    }
+
+    const parsed = bindStartRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return fail(reply, 400, "invalid_request", parsed.error.issues[0]?.message ?? "参数不合法");
+    }
+
+    const result = startBind(db, claims.sub, parsed.data.qq, config.bind.codeTtlSeconds);
+    if (!result.ok) {
+      return fail(reply, 409, "qq_taken", "该 QQ 已被其他账号绑定");
+    }
+
+    return bindStartResponseSchema.parse({
+      code: result.ticket.code,
+      qq: parsed.data.qq,
+      expiresAt: new Date(result.ticket.expiresAt).toISOString(),
+      groupId: config.bind.groupId,
+      instruction: `请用 QQ ${parsed.data.qq} 在群 ${config.bind.groupId} 内发送：${result.ticket.code}`,
+    });
+  });
+
+  app.post("/api/v1/bind/confirm", async (request, reply) => {
+    const claims = await requireUser(request, reply);
+    if (!claims) {
+      return;
+    }
+
+    const parsed = bindConfirmRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return fail(reply, 400, "invalid_request", parsed.error.issues[0]?.message ?? "参数不合法");
+    }
+
+    const bound = confirmBind(db, claims.sub, parsed.data.code);
+    if (!bound) {
+      return fail(reply, 400, "invalid_code", "绑定码无效或已过期");
+    }
+
+    return bindConfirmResponseSchema.parse({
+      qq: bound.qq,
+      verifiedAt: new Date(bound.verifiedAt).toISOString(),
+    });
+  });
+}

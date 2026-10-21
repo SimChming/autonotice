@@ -4,6 +4,11 @@ FROM node:20-slim AS build
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+
+# better-sqlite3 优先用预编译包；无预编译时回退 node-gyp 需要编译链
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 
 WORKDIR /repo

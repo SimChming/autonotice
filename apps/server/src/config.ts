@@ -12,11 +12,30 @@ const envSchema = z.object({
   LLM_BASE_URL: z.string().default("https://dashscope.aliyuncs.com/compatible-mode/v1"),
   LLM_API_KEY: z.string().default(""),
   LLM_MODEL: z.string().default("deepseek-v4.1-flash"),
+  DATABASE_PATH: z.string().default("./data/app.db"),
+  JWT_SECRET: z.string().min(16).default("dev-only-insecure-secret-change-me"),
+  ONEBOT_WS_PATH: z.string().startsWith("/").default("/onebot/v11/ws"),
+  ONEBOT_ACCESS_TOKEN: z.string().default(""),
+  BIND_GROUP_ID: z.string().regex(/^\d+$/).default("1130297603"),
+  BIND_CODE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
 });
 
 export interface Config {
   port: number;
   logLevel: z.infer<typeof envSchema>["LOG_LEVEL"];
+  databasePath: string;
+  jwt: {
+    secret: string;
+    ttl: string;
+  };
+  onebot: {
+    wsPath: string;
+    accessToken: string;
+  };
+  bind: {
+    groupId: string;
+    codeTtlSeconds: number;
+  };
   llm: {
     baseUrl: string;
     apiKey: string;
@@ -37,6 +56,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     port: value.PORT,
     logLevel: value.LOG_LEVEL,
+    databasePath: value.DATABASE_PATH,
+    jwt: {
+      secret: value.JWT_SECRET,
+      ttl: "720h",
+    },
+    onebot: {
+      wsPath: value.ONEBOT_WS_PATH,
+      accessToken: value.ONEBOT_ACCESS_TOKEN,
+    },
+    bind: {
+      groupId: value.BIND_GROUP_ID,
+      codeTtlSeconds: value.BIND_CODE_TTL_SECONDS,
+    },
     llm: {
       baseUrl: value.LLM_BASE_URL,
       apiKey: value.LLM_API_KEY,
