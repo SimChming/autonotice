@@ -6,6 +6,7 @@ package bot
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -120,11 +121,12 @@ func (s *Service) HandleMessage(ctx context.Context, ev onebot.Event) error {
 		return nil
 	}
 	text := cleanText(ev.Text)
+	images := s.imageURLs(ctx, ev)
 	if ev.IsGroup() {
 		if ev.GroupID == "" || !mentioned(ev, s.selfIDs(ev)) {
 			return nil
 		}
-	} else if text == "" {
+	} else if text == "" && len(images) == 0 {
 		return nil
 	}
 
@@ -149,7 +151,75 @@ func (s *Service) HandleMessage(ctx context.Context, ev onebot.Event) error {
 	if !ev.IsGroup() && !authorized && !s.rate.allow("dm:"+ev.UserID) {
 		return s.send(ctx, ev, s.quotaReply())
 	}
-	return s.chat(ctx, ev, text, authorized)
+	return s.chat(ctx, ev, text, images, authorized)
+}
+
+// imageURLs 提取消息里的图片地址。NapCat 一般在 image 段直接给 url；
+// 若只有 file，则调用 get_image 兜底换取可访问链接。
+func (s *Service) imageURLs(ctx context.Context, ev onebot.Event) []string {
+	out := make([]string, 0, 2)
+	for _, seg := range ev.Segments {
+		if seg.Type != "image" {
+			continue
+		}
+		if u := seg.Str("url"); u != "" {
+			out = append(out, s.imageDataURL(ctx, u))
+			continue
+		}
+		file := seg.Str("file")
+		if file == "" || s.api == nil {
+			continue
+		}
+		callCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		raw, err := s.api.CallAction(callCtx, "get_image", map[string]any{"file": file})
+		cancel()
+		if err != nil {
+			continue
+		}
+		var resp struct {
+			URL string `json:"url"`
+		}
+		if json.Unmarshal(raw, &resp) == nil && resp.URL != "" {
+			out = append(out, s.imageDataURL(ctx, resp.URL))
+		}
+	}
+	return out
+}
+
+// maxImageBytes 限制单张图片体积，避免把超大图塞进模型请求。
+const maxImageBytes = 6 << 20
+
+// imageDataURL 把图片下载成 data URI：QQ 图床直链有时对服务端 IP 不友好，
+// 转成 base64 后视觉模型必然能读到；下载失败则退回原链接。
+func (s *Service) imageDataURL(ctx context.Context, raw string) string {
+	if raw == "" {
+		return ""
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, raw, nil)
+	if err != nil {
+		return raw
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		s.log.Warn("image download failed, fall back to url", "err", err)
+		return raw
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return raw
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes))
+	if err != nil || len(body) == 0 {
+		return raw
+	}
+	mime := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(mime, "image/") {
+		mime = "image/jpeg"
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(body)
 }
 
 // selfIDs lists the robot's own QQ numbers used for @-detection. OneBot v11
@@ -313,7 +383,7 @@ type aiReply struct {
 // chat runs the persona conversation. allowShell is false for everyone except
 // ControlQQ: the model may still be asked to run something, in which case we
 // ignore the command and answer with a playful refusal instead.
-func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, allowShell bool) error {
+func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images []string, allowShell bool) error {
 	key := s.sessionKey(ev)
 	if s.llm == nil || !s.llm.Configured() {
 		return s.send(ctx, ev, "🐋 呜…主人的鲸鱼脑有点晕，等下再试喵~")
@@ -331,13 +401,25 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, allowS
 	sourceText := s.extractSourceText(ctx, ev)
 	capBlock := s.capabilityBlock()
 
-	turns := s.hist.appendUser(key, ev.UserID, text)
+	histText := text
+	if histText == "" && len(images) > 0 {
+		histText = "[发送了一张图片]"
+	}
+	turns := s.hist.appendUser(key, ev.UserID, histText)
 	final := ""
 	var last aiReply
 	for i := 0; i < s.cfg.MaxIterations; i++ {
 		callCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		raw, err := s.llm.ChatJSON(callCtx, systemPrompt(s.cfg.PersonaOverride),
-			s.buildPrompt(memBlock, turns, ev, allowShell, draftBlock, sourceText, capBlock))
+		prompt := s.buildPrompt(memBlock, turns, ev, allowShell, draftBlock, sourceText, capBlock)
+		if len(images) > 0 && i == 0 {
+			prompt += "\n【用户刚刚发送了图片，请直接查看图片内容（文字/画面）并据此回答，不要声称自己看不到图片。】"
+		}
+		// 只有最后一轮（最新消息）才附图片，避免历史轮次重复计费。
+		msgImages := images
+		if i > 0 {
+			msgImages = nil
+		}
+		raw, err := s.llm.ChatJSONImages(callCtx, systemPrompt(s.cfg.PersonaOverride), prompt, msgImages)
 		cancel()
 		if err != nil {
 			s.log.Warn("bot chat model call failed", "key", key, "err", err)

@@ -30,7 +30,10 @@ export default defineConfig<'webpack5'>(async (merge) => {
       'process.env.TARO_APP_API_BASE': JSON.stringify(process.env.TARO_APP_API_BASE || '')
     },
     copy: {
-      patterns: [],
+      patterns: [
+        // 站点图标：打包时把 src/favicon.ico 复制到 dist 根目录，供 index.html 引用
+        { from: 'src/favicon.ico', to: 'dist/favicon.ico' }
+      ],
       options: {}
     },
     framework: 'react',

@@ -112,7 +112,37 @@ func (c *Client) Configured() bool { return c.config().APIKey != "" }
 
 type chatMessage struct {
 	Role    string `json:"role"`
-	Content string `json:"content"`
+	// Content 既可以是纯文本 string，也可以是 OpenAI 多模态数组
+	// [{type:"text",...},{type:"image_url",...}]，因此用 any 承载。
+	Content any `json:"content"`
+}
+
+// chatContent 是多模态消息里的单个片段。
+type chatContent struct {
+	Type     string    `json:"type"`
+	Text     string    `json:"text,omitempty"`
+	ImageURL *imageURL `json:"image_url,omitempty"`
+}
+
+type imageURL struct {
+	URL string `json:"url"`
+}
+
+// userContent 组装 user 消息内容：有图片时返回多模态数组，否则返回纯文本。
+func userContent(text string, images []string) any {
+	if len(images) == 0 {
+		return text
+	}
+	parts := make([]chatContent, 0, len(images)+1)
+	parts = append(parts, chatContent{Type: "text", Text: text})
+	for _, img := range images {
+		img = strings.TrimSpace(img)
+		if img == "" {
+			continue
+		}
+		parts = append(parts, chatContent{Type: "image_url", ImageURL: &imageURL{URL: img}})
+	}
+	return parts
 }
 
 type chatRequest struct {
@@ -143,6 +173,12 @@ type chatResponse struct {
 // validated JSON payload. It retries up to MaxRetries times with backoff on
 // transport errors, empty content and malformed JSON.
 func (c *Client) ChatJSON(ctx context.Context, system, user string) (json.RawMessage, error) {
+	return c.ChatJSONImages(ctx, system, user, nil)
+}
+
+// ChatJSONImages 与 ChatJSON 相同，但会把图片以多模态数组塞进 user 消息，
+// 供 qwen-vl-plus 等视觉模型识图。images 为图片公网 URL 或 data:base64。
+func (c *Client) ChatJSONImages(ctx context.Context, system, user string, images []string) (json.RawMessage, error) {
 	cfg := c.config()
 	if cfg.APIKey == "" {
 		return nil, fmt.Errorf("deepseek: api key not configured")
@@ -158,7 +194,7 @@ func (c *Client) ChatJSON(ctx context.Context, system, user string) (json.RawMes
 			case <-time.After(backoff):
 			}
 		}
-		raw, err := c.doChat(ctx, system, user)
+		raw, err := c.doChat(ctx, system, user, images)
 		if err == nil {
 			return raw, nil
 		}
@@ -168,13 +204,13 @@ func (c *Client) ChatJSON(ctx context.Context, system, user string) (json.RawMes
 	return nil, fmt.Errorf("deepseek: exhausted %d attempts: %w", attempts, lastErr)
 }
 
-func (c *Client) doChat(ctx context.Context, system, user string) (json.RawMessage, error) {
+func (c *Client) doChat(ctx context.Context, system, user string, images []string) (json.RawMessage, error) {
 	cfg := c.config()
 	reqBody := chatRequest{
 		Model: cfg.Model,
 		Messages: []chatMessage{
 			{Role: "system", Content: system},
-			{Role: "user", Content: user},
+			{Role: "user", Content: userContent(user, images)},
 		},
 		ResponseFormat: map[string]string{"type": "json_object"},
 		MaxTokens:      cfg.MaxTokens,

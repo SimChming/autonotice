@@ -75,6 +75,8 @@ export interface IconProps {
 }
 
 export function Icon({ name, className, strokeWidth = 1.8, color }: IconProps) {
+  // 未知图标名兜底：绝不让一个拼错的名字把整页渲染打断
+  const paths = PATHS[name] || PATHS.bell
   const attrs: Record<string, unknown> = {
     viewBox: '0 0 24 24',
     className: `qqsa-icon${className ? ` ${className}` : ''}`,
@@ -88,6 +90,6 @@ export function Icon({ name, className, strokeWidth = 1.8, color }: IconProps) {
   return createElement(
     'svg',
     attrs,
-    ...PATHS[name].map((d, i) => createElement('path', { key: i, d }))
+    ...paths.map((d, i) => createElement('path', { key: i, d }))
   )
 }

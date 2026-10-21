@@ -3,7 +3,7 @@ import { Image, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 
 import { Empty } from '../../components/Empty'
-import { Icon } from '../../components/Icon'
+import { Icon, type IconName } from '../../components/Icon'
 import { PageHeader } from '../../components/PageHeader'
 import { TabBar } from '../../components/TabBar'
 import { api } from '../../services/api'
@@ -31,7 +31,7 @@ function cleanCQ(s: string): string {
 /** 根据 alert 的来源字段决定显示成 "群聊" 还是 "私聊" */
 function sourceLabel(a: { message_type?: string; source_name?: string; group_id?: string }) {
   const isPrivate = a.message_type === 'private' || (!a.message_type && !a.group_id)
-  const icon = isPrivate ? 'message-circle' : 'users'
+  const icon: IconName = isPrivate ? 'user' : 'groups'
   const label = isPrivate ? '私聊' : '群聊'
   const detail = a.source_name || (isPrivate ? '' : a.group_id ? `群 ${a.group_id}` : '')
   return { icon, label, detail, isPrivate }
@@ -127,7 +127,7 @@ export default function AlertsPage() {
                   )}
                   <View className='alert-card__source-info'>
                     <View className='alert-card__source-label'>
-                      <Icon name={src.icon as any} className='alert-card__source-icon' strokeWidth={2} />
+                      <Icon name={src.icon} className='alert-card__source-icon' strokeWidth={2} />
                       <Text className='alert-card__source-type'>{src.label}</Text>
                     </View>
                     {src.detail ? <Text className='alert-card__source-name'>{src.detail}</Text> : null}
