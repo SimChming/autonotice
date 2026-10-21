@@ -1,0 +1,64 @@
+# QQ 群 AI 日程助手 — 环境依赖清单 (requirements.txt)
+# ============================================================================
+# 本项目为 Go + Node 混合技术栈，不存在 pip 依赖；本文件是交接用的人读版
+# 环境清单。真实版本锁定以以下文件为准：
+#   服务端依赖锁定: server/go.mod          (Go modules)
+#   客户端依赖锁定: client/package.json     (npm)
+# ============================================================================
+
+# ── 工具链（最低版本）────────────────────────────────────────────────────────
+[toolchain]
+go >= 1.23                        # 服务端编译（交叉编译需 CGO_ENABLED=0）
+node >= 18                        # 客户端构建（Taro 4 要求）
+npm >= 9
+rust >= 1.75                      # Tauri 2 Windows 壳；cargo 默认在
+                                  #   %USERPROFILE%\.cargo\bin（不在 PATH，需手动加）
+jdk == 17                         # Android 构建（本机: D:\jdk-17\jdk-17.0.20.1+1，
+                                  #   注意是嵌套目录，JAVA_HOME 指向内层）
+android-sdk >= 33                 # Capacitor Android（本机: D:\android-sdk）
+
+# ── 服务端 Go 依赖（server/go.mod，勿手改此清单）────────────────────────────
+[go-dependencies]
+github.com/PuerkitoBio/goquery == v1.9.2            # HTML 解析
+github.com/extrame/xls == v0.0.1                    # 旧版 .xls 解析
+github.com/go-shiori/go-readability == v0.0.0-20251205110129  # 网页正文抽取
+github.com/golang-jwt/jwt/v5 == v5.2.1              # JWT 鉴权
+github.com/google/uuid == v1.6.0                    # UUID 生成
+github.com/gorilla/websocket == v1.5.3              # OneBot v11 反向 WS
+github.com/ledongthuc/pdf == v0.0.0-20240201131950  # PDF 文本抽取
+github.com/robfig/cron/v3 == v3.0.1                 # 定时任务
+github.com/xuri/excelize/v2 == v2.8.1               # .xlsx 解析/导出
+golang.org/x/text == v0.22.0                        # 文本编码
+gopkg.in/yaml.v3 == v3.0.1                          # 配置解析
+modernc.org/sqlite == v1.30.1                       # 纯 Go SQLite（无 CGO，
+                                                    #   交叉编译关键依赖）
+
+# ── 客户端 npm 依赖（client/package.json）────────────────────────────────────
+[npm-dependencies]
+@tarojs/* == 4.0.13                                 # Taro 框架全家桶
+react == ^18.2.0                                    # UI 框架
+react-dom == ^18.2.0
+zustand == ^4.5.5                                   # 状态管理
+@capacitor/core == ^6.2.0                           # Android 壳
+@capacitor/android == ^6.2.2
+@capacitor/ios == ^6.2.2
+@capacitor/local-notifications == ^6.1.0            # 本地提醒
+@tauri-apps/api == ^2.1.1                           # Windows 壳
+@tauri-apps/plugin-notification == ^2.2.0
+sass == ^1.78.0                                     # (dev) 样式
+typescript == ^5.4.5                                # (dev)
+webpack == 5.91.0                                   # (dev, Taro 固定版本)
+
+# ── 运行时外部服务（生产）────────────────────────────────────────────────────
+[runtime-services]
+deepseek-api                       # api.deepseek.com, model=deepseek-chat
+                                   #   密钥: 环境变量 DEEPSEEK_API_KEY (app.env)
+jina-reader            (可选)       # r.jina.ai 网页正文抓取, JINA_API_KEY
+napcat                 (必须)       # QQ 协议端, OneBot v11, 反向 WS → :8080
+                                   #   WebUI http://127.0.0.1:6099
+                                   #   机器人小号 3754609823（风控, 重启需扫码）
+sqlite3                 (内嵌)      # 无需独立安装, modernc 纯 Go 驱动
+
+# ── 服务器已预装运维工具（120.26.224.86, Ubuntu 22.04）─────────────────────
+[server-tools]
+htop iftop iotop ncdu jq tree lsof strace unzip zip net-tools psmisc file bc

@@ -1,0 +1,176 @@
+.login__scroll {
+  padding: 8px 32px 48px;
+}
+
+.login__card {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.login__segment {
+  display: flex;
+  background: var(--bg-sunken);
+  border-radius: 14px;
+  padding: 4px;
+}
+
+.login__segment-item {
+  flex: 1;
+  height: 68px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+}
+
+.login__segment-item.is-active {
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.login__segment-text {
+  font-size: 27px;
+  color: var(--text-secondary);
+}
+
+.login__segment-item.is-active .login__segment-text {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.login__field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login__label {
+  font-size: 24px;
+  color: var(--text-secondary);
+}
+
+.login__input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  height: 88px;
+  line-height: 88px;
+  border-radius: 14px;
+  background: var(--bg-sunken);
+  padding: 0 24px;
+  font-size: 29px;
+  color: var(--text);
+}
+
+.login__remember {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.login__remember-label {
+  font-size: 26px;
+  color: var(--text-secondary);
+}
+
+.login__error {
+  font-size: 24px;
+  color: var(--danger);
+}
+
+.login__submit {
+  height: 92px;
+  border-radius: 16px;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(10, 132, 255, 0.28);
+}
+
+.login__submit.is-loading {
+  opacity: 0.8;
+}
+
+.login__submit-text {
+  font-size: 31px;
+  font-weight: 650;
+  color: #fff;
+}
+
+.login__spinner {
+  width: 34px;
+  height: 34px;
+  border-width: 3px;
+  border-color: rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+}
+
+.login__hint {
+  font-size: 23px;
+  color: var(--text-tertiary);
+  line-height: 1.65;
+}
+
+.login__endpoint {
+  display: block;
+  text-align: center;
+  font-size: 21px;
+  color: var(--text-tertiary);
+  padding: 32px 0 8px;
+}
+
+/* ---------------------------------------------------------------
+ * 桌面形态：全屏渐变背景 + 居中卡片（尺寸用大写 PX 不转 rem）
+ * --------------------------------------------------------------- */
+body.desktop-ui .login .page-header {
+  display: none;
+}
+
+body.desktop-ui .login {
+  min-height: 100vh;
+}
+
+body.desktop-ui .login .page-scroll {
+  flex: 1;
+}
+
+body.desktop-ui .login .login__scroll {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(1100PX 560PX at 18% -8%, var(--accent-soft), transparent 62%),
+    radial-gradient(900PX 480PX at 108% 108%, var(--success-soft), transparent 58%),
+    var(--bg);
+  padding: 48PX 24PX;
+}
+
+body.desktop-ui .login .login__card {
+  width: 420PX;
+  max-width: 100%;
+  padding: 36PX 34PX;
+  border-radius: 20PX;
+  box-shadow: 0 2px 6PX rgba(0, 0, 0, 0.04), 0 24px 64PX rgba(0, 0, 0, 0.1);
+}
+
+body.desktop-ui .login .login__input {
+  height: 46PX;
+  line-height: 46PX;
+  font-size: 15PX;
+}
+
+body.desktop-ui .login .login__submit {
+  height: 46PX;
+  border-radius: 12PX;
+}
+
+body.desktop-ui .login .login__submit-text {
+  font-size: 15PX;
+}

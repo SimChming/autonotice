@@ -1,0 +1,49 @@
+// 仅包含「变量 / mixin」——本文件会被注入到每个 .scss 文件顶部，
+// 因此绝不能在这里写会产出 CSS 的规则，否则会重复输出。
+
+// ---------- 颜色 ----------
+$accent: #0a84ff;
+$accent-press: #0060df;
+$success: #34c759;
+$warning: #ff9f0a;
+$danger: #ff3b30;
+
+// ---------- 圆角 ----------
+$radius-sm: 10px;
+$radius-md: 16px;
+$radius-lg: 22px;
+$radius-pill: 999px;
+
+// ---------- 间距（750 设计稿） ----------
+$gap-xs: 8px;
+$gap-sm: 16px;
+$gap-md: 24px;
+$gap-lg: 32px;
+$gap-xl: 48px;
+
+// ---------- 字号 ----------
+$font-xs: 22px;
+$font-sm: 26px;
+$font-md: 30px;
+$font-lg: 36px;
+$font-xl: 44px;
+$font-xxl: 56px;
+
+// ---------- mixin ----------
+@mixin card {
+  background: var(--bg-elevated);
+  border-radius: $radius-md;
+  box-shadow: var(--shadow-card);
+}
+
+@mixin ellipsis($lines: 1) {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: $lines;
+  text-overflow: ellipsis;
+}
+
+@mixin safe-bottom($extra: 0px) {
+  padding-bottom: calc(#{$extra} + env(safe-area-inset-bottom));
+}

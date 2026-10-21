@@ -1,0 +1,68 @@
+{
+  "name": "qq-schedule-client",
+  "version": "1.0.0",
+  "private": true,
+  "description": "QQ 群 AI 日程助手客户端 —— Taro 4 (React) 单一 H5 核心，壳打包 iOS/Android/Windows",
+  "templateInfo": {
+    "name": "default",
+    "typescript": true,
+    "css": "sass",
+    "framework": "react"
+  },
+  "scripts": {
+    "build:h5": "taro build --type h5",
+    "dev:h5": "npm run build:h5 -- --watch",
+    "build:weapp": "taro build --type weapp",
+    "dev:weapp": "taro build --type weapp --watch",
+    "cap:sync": "cd capacitor && npx cap sync",
+    "cap:add:ios": "cd capacitor && npx cap add ios",
+    "cap:add:android": "cd capacitor && npx cap add android",
+    "cap:open:ios": "cd capacitor && npx cap open ios",
+    "cap:open:android": "cd capacitor && npx cap open android",
+    "desktop:dev": "cd desktop && npm run dev",
+    "desktop:build": "cd desktop && npm run build"
+  },
+  "browserslist": [
+    "last 3 versions",
+    "Android >= 4.1",
+    "ios >= 8"
+  ],
+  "author": "",
+  "dependencies": {
+    "@babel/runtime": "^7.24.4",
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/app": "^6.0.2",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.2",
+    "@capacitor/local-notifications": "^6.1.0",
+    "@tarojs/components": "4.0.13",
+    "@tarojs/helper": "4.0.13",
+    "@tarojs/plugin-framework-react": "4.0.13",
+    "@tarojs/plugin-platform-h5": "4.0.13",
+    "@tarojs/react": "4.0.13",
+    "@tarojs/router": "4.0.13",
+    "@tarojs/runtime": "4.0.13",
+    "@tarojs/shared": "4.0.13",
+    "@tarojs/taro": "4.0.13",
+    "@tarojs/webpack5-runner": "4.0.13",
+    "@tauri-apps/api": "^2.1.1",
+    "@tauri-apps/plugin-notification": "^2.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.4",
+    "@babel/preset-react": "^7.24.1",
+    "@capacitor/cli": "^6.2.0",
+    "@tarojs/cli": "4.0.13",
+    "@tarojs/taro-loader": "4.0.13",
+    "@types/react": "^18.2.79",
+    "@types/webpack-env": "^1.18.5",
+    "babel-preset-taro": "4.0.13",
+    "react-refresh": "^0.14.0",
+    "sass": "^1.78.0",
+    "typescript": "^5.4.5",
+    "webpack": "5.91.0"
+  }
+}

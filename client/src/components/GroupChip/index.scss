@@ -1,0 +1,53 @@
+.group-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.group-chip__avatar,
+.group-chip__fallback {
+  flex: none;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.group-chip--md .group-chip__avatar,
+.group-chip--md .group-chip__fallback {
+  width: 40px;
+  height: 40px;
+}
+
+.group-chip--sm .group-chip__avatar,
+.group-chip--sm .group-chip__fallback {
+  width: 34px;
+  height: 34px;
+}
+
+.group-chip__fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.group-chip__fallback-icon {
+  width: 60%;
+  height: 60%;
+}
+
+.group-chip__name {
+  font-size: 23px;
+  color: var(--accent);
+  line-height: 1.4;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-chip--md .group-chip__name {
+  font-size: 25px;
+}

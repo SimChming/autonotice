@@ -1,0 +1,14 @@
+{
+  "name": "qq-schedule-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Tauri 2 打包壳：加载 client/dist（Taro H5）并负责托盘 / 开机自启 / 本地通知",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icon": "tauri icon ./app-icon.png"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}

@@ -1,0 +1,125 @@
+.calendar__today {
+  padding: 12px 22px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-card);
+}
+
+.calendar__today-text {
+  font-size: 24px;
+  color: var(--accent);
+}
+
+.calendar__panel {
+  margin: 0 32px 20px;
+  padding: 20px 18px 24px;
+  flex: none;
+}
+
+.calendar__month-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 16px;
+}
+
+.calendar__month {
+  font-size: 32px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.calendar__nav {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calendar__nav-icon {
+  width: 34px;
+  height: 34px;
+  color: var(--accent);
+}
+
+.calendar__nav-icon.is-prev {
+  transform: rotate(180deg);
+}
+
+.calendar__weekdays {
+  display: flex;
+  padding-bottom: 8px;
+}
+
+.calendar__weekday {
+  flex: 1;
+  text-align: center;
+  font-size: 21px;
+  color: var(--text-tertiary);
+}
+
+.calendar__grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.calendar__cell {
+  width: 14.2857%;
+  height: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 12px;
+}
+
+.calendar__cell.is-out .calendar__day {
+  color: var(--text-tertiary);
+  opacity: 0.45;
+}
+
+.calendar__cell.is-selected {
+  background: var(--accent);
+}
+
+.calendar__cell.is-selected .calendar__day {
+  color: #fff;
+  font-weight: 650;
+}
+
+.calendar__cell.is-today .calendar__day {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.calendar__cell.is-today.is-selected .calendar__day {
+  color: #fff;
+}
+
+.calendar__day {
+  font-size: 27px;
+  color: var(--text);
+}
+
+.calendar__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--separator-strong);
+}
+
+.calendar__dot.is-open {
+  background: var(--accent);
+}
+
+.calendar__cell.is-selected .calendar__dot,
+.calendar__cell.is-selected .calendar__dot.is-open {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.calendar__list {
+  padding: 4px 32px 24px;
+}

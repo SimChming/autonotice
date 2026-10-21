@@ -1,0 +1,22 @@
+[Unit]
+Description=NapCat.Shell (OneBot v11 for QQ) with Xvfb
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=napcat
+Group=napcat
+WorkingDirectory=/opt/napcat
+# NapCat.Shell needs an X display even headless.
+Environment=DISPLAY=:99
+Environment=NAPCAT_ACCOUNT=YOUR_BOT_QQ
+ExecStartPre=/usr/bin/Xvfb :99 -screen 0 1080x800x24 -nolisten tcp
+# Replace with the actual NapCat launch script shipped by the installer.
+ExecStart=/opt/napcat/launch.sh
+Restart=always
+RestartSec=10
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

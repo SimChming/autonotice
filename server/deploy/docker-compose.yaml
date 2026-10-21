@@ -1,0 +1,37 @@
+services:
+  qqsched:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: qqsched/server:latest
+    restart: unless-stopped
+    # The Go binary is fully static (pure-Go SQLite, no CGO).
+    environment:
+      - SERVER_ADDR=:8080
+      - DATABASE_PATH=/data/app.db
+      - ONEBOT_MODE=reverse_ws
+      - ONEBOT_TOKEN=${ONEBOT_TOKEN:-changeme-token}
+      - ONEBOT_WS_PATH=/onebot/v11/ws
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+      - JINA_ENABLED=${JINA_ENABLED:-true}
+      - JINA_API_KEY=${JINA_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-changeme-jwt-secret}
+      - TZ=Asia/Shanghai
+      - FETCH_MAX_BYTES=20971520
+    ports:
+      - "8080:8080"
+    volumes:
+      - qqsched-data:/data
+      - ../configs/config.yaml:/config/config.yaml:ro
+    command: ["-config", "/config/config.yaml"]
+    # Give the bot room to post events; the container only needs loopback.
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  qqsched-data:

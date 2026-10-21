@@ -1,0 +1,6 @@
+{
+  "name": "qq-schedule-capacitor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor 壳工程（iOS / Android），webDir 指向 ../dist"
+}

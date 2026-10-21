@@ -1,0 +1,120 @@
+.reasoning-panel {
+  margin: 0 32px 16px;
+  padding: 0 24px;
+  overflow: hidden;
+  flex: none;
+}
+
+.reasoning-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 0;
+}
+
+.reasoning-panel__dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--text-tertiary);
+}
+
+.reasoning-panel.is-running .reasoning-panel__dot {
+  background: var(--accent);
+  animation: qqsa-pulse 1.2s ease-in-out infinite;
+}
+
+.reasoning-panel.is-done .reasoning-panel__dot {
+  background: var(--success);
+}
+
+.reasoning-panel.is-error .reasoning-panel__dot {
+  background: var(--danger);
+}
+
+@keyframes qqsa-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+.reasoning-panel__meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reasoning-panel__title {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.reasoning-panel__sub {
+  font-size: 22px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reasoning-panel__arrow {
+  width: 30px;
+  height: 30px;
+  color: var(--text-tertiary);
+  flex: none;
+  transition: transform 0.18s ease;
+}
+
+.reasoning-panel.is-open .reasoning-panel__arrow {
+  transform: rotate(90deg);
+}
+
+.reasoning-panel__error {
+  display: block;
+  font-size: 23px;
+  color: var(--danger);
+  padding-bottom: 16px;
+}
+
+.reasoning-panel__scroll {
+  max-height: 640px;
+  border-top: 1px solid var(--separator);
+}
+
+.reasoning-panel__block {
+  padding: 20px 0 4px;
+}
+
+.reasoning-panel__label {
+  display: block;
+  font-size: 22px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+  padding-bottom: 8px;
+}
+
+.reasoning-panel__text {
+  display: block;
+  font-size: 25px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.reasoning-panel__hint {
+  display: block;
+  font-size: 24px;
+  color: var(--text-tertiary);
+  padding: 24px 0;
+}

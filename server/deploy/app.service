@@ -1,0 +1,27 @@
+[Unit]
+Description=QQ Group AI Schedule Assistant (Go server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=qqsched
+Group=qqsched
+WorkingDirectory=/opt/qqsched
+EnvironmentFile=/opt/qqsched/app.env
+ExecStart=/opt/qqsched/qqsched -config /opt/qqsched/config.yaml
+Restart=always
+RestartSec=5
+# Resource limits and hardening (see plan: MemoryMax / TasksMax / PrivateTmp).
+MemoryMax=768M
+TasksMax=256
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/qqsched/data
+# The bot runs on the same host; the server only needs loopback + outbound TLS.
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

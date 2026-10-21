@@ -1,0 +1,267 @@
+/* ==============================================================
+ * 手机端基准样式（Taro 750 设计稿：小写 px 会被 postcss 转为
+ * rpx/rem，随屏宽缩放，手机上正合适）。
+ * ≥768px 平板、≥1024px 桌面用大写 PX 覆盖（不参与换算）。
+ * ============================================================== */
+
+.page-root.admin {
+  background: var(--bg);
+  min-height: 100vh;
+}
+
+.admin__scroll {
+  padding: 4px 32px 40px;
+}
+
+.admin__card {
+  background: var(--bg-elevated);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+  padding: 18px 24px 24px;
+  margin-bottom: 28px;
+}
+
+.admin__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 72px;
+}
+
+.admin__row-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin__label {
+  font-size: 26px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.admin__sub {
+  font-size: 22px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.admin__value {
+  font-size: 24px;
+  color: var(--text-secondary);
+  text-align: right;
+  max-width: 62%;
+  word-break: break-all;
+}
+
+.admin__value.is-ok {
+  color: var(--success);
+}
+
+.admin__value.is-warn {
+  color: var(--warning);
+}
+
+.admin__field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 0;
+}
+
+.admin__input {
+  width: 100%;
+  height: 76px;
+  border-radius: 12px;
+  background: var(--bg-sunken);
+  padding: 0 22px;
+  font-size: 25px;
+  color: var(--text);
+  box-sizing: border-box;
+}
+
+.admin__input--short {
+  width: 200px;
+  text-align: right;
+}
+
+.admin__grid {
+  display: flex;
+  gap: 18px;
+}
+
+.admin__grid-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 0;
+  min-width: 0;
+}
+
+.admin__hint {
+  display: block;
+  font-size: 22px;
+  color: var(--text-tertiary);
+  line-height: 1.7;
+  padding-top: 10px;
+}
+
+.admin__actions {
+  display: flex;
+  gap: 14px;
+  padding-top: 20px;
+  flex-wrap: wrap;
+}
+
+.admin__btn {
+  flex: 1;
+  min-width: 170px;
+  height: 80px;
+  border-radius: 14px;
+  background: var(--bg-sunken);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin__btn.is-primary {
+  background: var(--accent);
+}
+
+.admin__btn.is-busy {
+  opacity: 0.65;
+}
+
+.admin__btn-text {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.admin__btn-text.is-primary {
+  color: #fff;
+}
+
+.admin__btn-text.is-danger {
+  color: var(--danger);
+}
+
+.admin__small-btn {
+  padding: 12px 24px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  flex-shrink: 0;
+}
+
+.admin__small-btn.is-busy {
+  opacity: 0.6;
+}
+
+.admin__small-btn-text {
+  font-size: 23px;
+  color: var(--danger);
+}
+
+.admin__save {
+  display: flex;
+  padding: 4px 0 30px;
+}
+
+.admin__about {
+  display: block;
+  font-size: 21px;
+  color: var(--text-tertiary);
+  line-height: 1.8;
+  padding: 8px 8px 24px;
+}
+
+/* 快捷模型预设按钮 */
+.admin__model-presets {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 4px 0 8px;
+}
+
+.admin__preset-btn {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  font-size: 22px;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.admin__preset-btn.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ==============================================================
+ * 平板端（≥ 768px）
+ * 容器居中、max-width 收窄，字号用大写 PX 避开 rem 换算放大
+ * ============================================================== */
+@media (min-width: 768px) {
+  .page-root.admin .admin__scroll {
+    max-width: 680PX;
+    margin: 0 auto;
+    padding: 24PX 28PX 48PX;
+  }
+  .page-root.admin .admin__card {
+    border-radius: 14PX;
+    padding: 16PX 22PX 22PX;
+    margin-bottom: 22PX;
+  }
+  .page-root.admin .admin__label { font-size: 15PX; }
+  .page-root.admin .admin__sub   { font-size: 13PX; }
+  .page-root.admin .admin__value { font-size: 14PX; }
+  .page-root.admin .admin__input {
+    height: 44PX;
+    font-size: 14PX;
+    padding: 0 14PX;
+    border-radius: 10PX;
+  }
+  .page-root.admin .admin__input--short { width: 120PX; }
+  .page-root.admin .admin__btn { height: 44PX; border-radius: 10PX; min-width: 120PX; }
+  .page-root.admin .admin__btn-text { font-size: 14PX; }
+  .page-root.admin .admin__small-btn-text { font-size: 13PX; }
+  .page-root.admin .admin__hint { font-size: 12.5PX; padding-top: 6PX; }
+  .page-root.admin .admin__row { min-height: 52PX; }
+  .page-root.admin .admin__model-presets { padding: 2PX 0 6PX; gap: 8PX; }
+  .page-root.admin .admin__preset-btn { font-size: 12PX; padding: 6PX 12PX; }
+  .page-root.admin .admin__about { font-size: 12PX; padding: 4PX 4PX 20PX; }
+}
+
+/* ==============================================================
+ * 桌面端（≥ 1024px）
+ * 容器略宽，两列栅格让多数字段更舒展
+ * ============================================================== */
+@media (min-width: 1024px) {
+  .page-root.admin .admin__scroll {
+    max-width: 820PX;
+    padding: 28PX 36PX 56PX;
+  }
+  .page-root.admin .admin__card {
+    border-radius: 15PX;
+    padding: 18PX 28PX 26PX;
+    margin-bottom: 24PX;
+  }
+  .page-root.admin .admin__label { font-size: 15.5PX; }
+  .page-root.admin .admin__sub   { font-size: 13.5PX; }
+  .page-root.admin .admin__value { font-size: 14.5PX; max-width: 58%; }
+  .page-root.admin .admin__input { height: 46PX; font-size: 14.5PX; padding: 0 16PX; }
+  .page-root.admin .admin__input--short { width: 128PX; }
+  .page-root.admin .admin__btn { height: 46PX; min-width: 140PX; }
+  .page-root.admin .admin__btn-text { font-size: 14.5PX; }
+  .page-root.admin .admin__small-btn-text { font-size: 13.5PX; }
+  .page-root.admin .admin__hint { font-size: 12.5PX; }
+  .page-root.admin .admin__grid { gap: 20PX; }
+  .page-root.admin .admin__actions { gap: 12PX; }
+}

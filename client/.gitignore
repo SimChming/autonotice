@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.swc/
+.temp/
+.rn_temp/
+
+# Tauri
+desktop/src-tauri/target/
+desktop/node_modules/
+
+# Capacitor 生成的原生工程（如需入库可自行放开）
+# capacitor/ios/
+# capacitor/android/

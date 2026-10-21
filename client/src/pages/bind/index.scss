@@ -1,0 +1,214 @@
+.bind__scroll {
+  padding: 8px 32px 64px;
+}
+
+.bind__card {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.bind__row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bind__label {
+  font-size: 24px;
+  color: var(--text-secondary);
+}
+
+.bind__input {
+  height: 88px;
+  border-radius: 14px;
+  background: var(--bg-sunken);
+  padding: 0 24px;
+  font-size: 29px;
+  color: var(--text);
+}
+
+.bind__error {
+  font-size: 24px;
+  color: var(--danger);
+}
+
+.bind__submit {
+  height: 92px;
+  border-radius: 16px;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bind__submit.is-loading {
+  opacity: 0.7;
+}
+
+.bind__submit-text {
+  font-size: 31px;
+  font-weight: 650;
+  color: #fff;
+}
+
+.bind__waiting {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.bind__waiting-title {
+  font-size: 26px;
+  color: var(--text-secondary);
+}
+
+.bind__code-box {
+  background: var(--bg-sunken);
+  border-radius: 14px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px dashed var(--separator-strong);
+}
+
+.bind__code {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+
+.bind__code-copy {
+  font-size: 22px;
+  color: var(--accent);
+}
+
+.bind__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bind__step {
+  font-size: 25px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.bind__polling {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 0 4px;
+}
+
+.bind__spinner {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+}
+
+.bind__polling-text {
+  font-size: 25px;
+  color: var(--text-secondary);
+}
+
+.bind__restart {
+  font-size: 25px;
+  color: var(--accent);
+  text-align: center;
+  padding: 8px 0;
+}
+
+.bind__done {
+  padding: 48px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.bind__done-ring {
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  background: var(--success-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bind__done-check {
+  font-size: 52px;
+  color: var(--success);
+}
+
+.bind__done-title {
+  font-size: 38px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.bind__done-hint {
+  font-size: 25px;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.bind__done .bind__submit {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.bind__list-block {
+  margin-top: 40px;
+}
+
+.bind__item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  margin-bottom: 14px;
+}
+
+.bind__item-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bind__item-qq {
+  font-size: 29px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bind__item-group {
+  font-size: 23px;
+  color: var(--text-secondary);
+}
+
+.bind__item-state {
+  font-size: 22px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.bind__item-state.is-ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.bind__item-unbind {
+  font-size: 24px;
+  color: var(--danger);
+}

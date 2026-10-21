@@ -1,0 +1,71 @@
+.reminder-layer {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 16px);
+  left: 20px;
+  right: 20px;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.reminder-card {
+  pointer-events: auto;
+  background: var(--bg-elevated);
+  border-radius: 18px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.16);
+  border: 1px solid var(--separator);
+  padding: 22px 24px;
+  animation: qqsa-slide-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reminder-card.is-urgent {
+  border-color: var(--warning);
+}
+
+.reminder-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reminder-card__title {
+  flex: 1;
+  font-size: 30px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.reminder-card__close {
+  font-size: 36px;
+  line-height: 1;
+  color: var(--text-tertiary);
+  padding: 0 4px;
+}
+
+.reminder-card__body {
+  display: block;
+  margin-top: 8px;
+  font-size: 26px;
+  color: var(--text-secondary);
+}
+
+.reminder-card__hint {
+  display: block;
+  margin-top: 12px;
+  font-size: 22px;
+  color: var(--accent);
+}
+
+@keyframes qqsa-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

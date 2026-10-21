@@ -1,0 +1,198 @@
+/* ---------------------------------------------------------------
+ * 全局设计系统（Apple-like）：深浅色自适应的 CSS 变量
+ * 尺寸使用 750 设计稿 px，交由 Taro pxtransform 转换为响应式 rem
+ * --------------------------------------------------------------- */
+
+:root {
+  --bg: #f2f2f7;
+  --bg-elevated: #ffffff;
+  --bg-sunken: #eaeaef;
+  --text: #1c1c1e;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #a1a1a6;
+  --separator: rgba(60, 60, 67, 0.12);
+  --separator-strong: rgba(60, 60, 67, 0.2);
+  --accent: #0a84ff;
+  --accent-press: #0060df;
+  --accent-soft: rgba(10, 132, 255, 0.12);
+  --danger: #ff3b30;
+  --danger-soft: rgba(255, 59, 48, 0.12);
+  --warning: #ff9f0a;
+  --warning-soft: rgba(255, 159, 10, 0.14);
+  --success: #34c759;
+  --success-soft: rgba(52, 199, 89, 0.14);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.03), 0 6px 20px rgba(0, 0, 0, 0.045);
+  --nav-bg: rgba(249, 249, 249, 0.86);
+  --overlay: rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --bg-elevated: #1c1c1e;
+    --bg-sunken: #2c2c2e;
+    --text: #f5f5f7;
+    --text-secondary: #a1a1a6;
+    --text-tertiary: #8e8e93;
+    --separator: rgba(84, 84, 88, 0.55);
+    --separator-strong: rgba(120, 120, 128, 0.7);
+    --accent: #0a84ff;
+    --accent-press: #409cff;
+    --accent-soft: rgba(10, 132, 255, 0.22);
+    --danger: #ff453a;
+    --danger-soft: rgba(255, 69, 58, 0.2);
+    --warning: #ffd60a;
+    --warning-soft: rgba(255, 214, 10, 0.18);
+    --success: #30d158;
+    --success-soft: rgba(48, 209, 88, 0.2);
+    --shadow-card: none;
+    --nav-bg: rgba(28, 28, 30, 0.82);
+    --overlay: rgba(0, 0, 0, 0.55);
+  }
+}
+
+page,
+body,
+html {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue',
+    'Microsoft YaHei', Arial, sans-serif;
+  font-size: 28px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+.taro_page,
+.taro_router {
+  background: transparent;
+}
+
+view,
+text {
+  box-sizing: border-box;
+}
+
+/* ---------------- 通用原子类 ---------------- */
+
+.page-root {
+  min-height: 100vh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.page-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--separator);
+}
+
+.section-title {
+  display: block;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 8px 8px 12px;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-tertiary {
+  color: var(--text-tertiary);
+}
+
+.divider {
+  height: 1px;
+  background: var(--separator);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 点击反馈 */
+.pressable {
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.16s ease;
+}
+
+.pressable:active {
+  transform: scale(0.98);
+  opacity: 0.9;
+}
+
+/* 骨架/加载 */
+.spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid var(--separator-strong);
+  border-top-color: var(--accent);
+  animation: qqsa-spin 0.8s linear infinite;
+}
+
+@keyframes qqsa-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------------------------------------------------------
+ * 宽屏适配：平板 / Windows 桌面不再呈现为「大号手机」
+ * 注意：断点与根字号刻意使用大写 PX，避免被 pxtransform 转成 rem。
+ * 页脚脚本会给 <html> 写入内联 font-size，故这里必须 !important 才能覆盖。
+ * --------------------------------------------------------------- */
+@media (min-width: 700PX) {
+  html {
+    font-size: 27PX !important;
+  }
+
+  .page-root {
+    max-width: 560PX;
+    margin: 0 auto;
+  }
+}
+
+@media (min-width: 1200PX) {
+  html {
+    font-size: 30PX !important;
+  }
+
+  .page-root {
+    max-width: 620PX;
+  }
+}
+
+/* ---------------------------------------------------------------
+ * 桌面专用形态（DesktopLayout 挂 body.desktop-ui）
+ * 侧边栏外壳接管导航，内容区限宽居中，摆脱「大号手机」观感
+ * --------------------------------------------------------------- */
+body.desktop-ui .page-root {
+  max-width: none;
+  margin: 0;
+}
+
+body.desktop-ui .dlayout__main .page-root {
+  max-width: 980PX;
+  margin: 0 auto;
+  padding-left: 12PX;
+  padding-right: 12PX;
+  box-sizing: border-box;
+}
+
+body.desktop-ui .tabbar {
+  display: none;
+}

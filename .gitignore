@@ -1,0 +1,57 @@
+# ====== 通用 ======
+node_modules/
+*.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ====== Client (Taro + Tauri + Capacitor) ======
+client/dist/
+client/temp/
+client/rn_temp/
+
+# Tauri build artifacts
+client/desktop/src-tauri/target/
+client/desktop/src-tauri/gen/
+
+# Capacitor native build outputs
+client/capacitor/android/app/build/
+client/capacitor/android/build/
+client/capacitor/android/.gradle/
+client/capacitor/android/local.properties
+client/capacitor/ios/App/App/build/
+client/capacitor/ios/Pods/
+
+# Node / tool caches
+*.tgz
+.cache/
+.parcel-cache/
+.eslintcache
+
+# ====== Server (Go) ======
+server/cmd/app
+server/server
+server/qqsched
+*.exe
+*.dll
+
+# SQLite database + runtime data
+server/data/
+*.db
+*.db-journal
+
+# 运行时生成的 env/config（敏感）
+app.env
+config.yaml
+*.env
+*.env.local
+*.env.*.local
+
+# 上传/缓存目录
+server/cache/
+server/uploads/
+
+# Go vendor / IDE
+server/vendor/

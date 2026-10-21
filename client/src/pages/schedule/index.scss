@@ -1,0 +1,143 @@
+.schedule__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.schedule__replan {
+  height: 56px;
+  padding: 0 20px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-soft);
+}
+
+.schedule__replan.is-busy {
+  opacity: 0.7;
+}
+
+.schedule__replan-icon {
+  width: 30px;
+  height: 30px;
+  color: var(--accent);
+}
+
+.schedule__replan.is-busy .schedule__replan-icon {
+  animation: qqsa-pulse 1.2s ease-in-out infinite;
+}
+
+.schedule__replan-text {
+  font-size: 24px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.schedule__refresh {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-card);
+}
+
+.schedule__refresh-icon {
+  width: 34px;
+  height: 34px;
+  color: var(--accent);
+}
+
+.schedule__refresh-icon.is-spinning {
+  animation: qqsa-spin 1s linear infinite;
+}
+
+.schedule__filters {
+  display: flex;
+  gap: 10px;
+  padding: 4px 32px 12px;
+  flex: none;
+}
+
+.schedule__filter {
+  flex: 1;
+  height: 68px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-card);
+}
+
+.schedule__filter.is-active {
+  background: var(--accent);
+}
+
+.schedule__filter-text {
+  font-size: 26px;
+  color: var(--text-secondary);
+}
+
+.schedule__filter.is-active .schedule__filter-text {
+  color: #fff;
+  font-weight: 600;
+}
+
+.schedule__banner {
+  margin: 0 32px 12px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: var(--warning-soft);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.schedule__banner-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--warning);
+}
+
+.schedule__banner-text {
+  font-size: 23px;
+  color: var(--warning);
+}
+
+.schedule__stats {
+  display: flex;
+  gap: 22px;
+  padding: 4px 36px 12px;
+  flex: none;
+}
+
+.schedule__stat {
+  font-size: 22px;
+  color: var(--text-secondary);
+}
+
+.schedule__stat.is-muted {
+  color: var(--text-tertiary);
+}
+
+.schedule__list {
+  padding: 4px 32px 24px;
+}
+
+/* 宽屏：改为两列网格，平板 / 桌面更好地利用横向空间 */
+@media (min-width: 700PX) {
+  .schedule__list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 0 16px;
+  }
+
+  .schedule__list > :only-child {
+    grid-column: 1 / -1;
+  }
+}

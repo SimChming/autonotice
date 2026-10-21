@@ -1,0 +1,84 @@
+# QQ 群 AI 日程助手 — 服务端配置示例
+# 复制为 config.yaml 后按需修改；环境变量可覆盖下列任意项（见 README）。
+
+server:
+  addr: ":8080"
+  base_path: "/api/v1"
+
+onebot:
+  # reverse_ws（推荐，NapCat 反向连接）| http_post（备选上报）
+  mode: "reverse_ws"
+  # NapCat 反向 WS 客户端配置的 access_token，必须一致
+  token: "changeme-token"
+  ws_path: "/onebot/v11/ws"
+  http_post_path: "/onebot/v11/http"
+  # 当使用反向 WS 时，仍可通过该地址调用 OneBot OneAPI（可选）
+  api_base: "http://127.0.0.1:3000"
+  # 白名单群号；为空表示不限制
+  groups: []
+
+database:
+  path: "data/app.db"
+
+auth:
+  jwt_secret: "changeme-jwt-secret"
+  jwt_ttl_hours: 720
+
+bind:
+  code_ttl_minutes: 15
+  code_length: 6
+
+deepseek:
+  api_key: ""                 # 建议用环境变量 DEEPSEEK_API_KEY
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-chat"
+  timeout_seconds: 90
+  max_retries: 2
+  max_tokens: 4096
+  temperature: 0.3
+
+fetch:
+  enabled: true
+  max_bytes: 20971520          # 文件下载上限 20MB
+  web_max_bytes: 2097152       # 网页抓取上限 2MB
+  connect_timeout_seconds: 5
+  total_timeout_seconds: 20
+  concurrency: 4               # 3-5
+  cache_ttl_hours: 168         # content_hash 缓存 7 天
+  per_group_hourly_limit: 60
+
+jina:
+  enabled: true
+  api_key: ""                  # 可选，环境变量 JINA_API_KEY
+  engine: ""                   # 可选 X-Engine，如 browser
+  base_url: "https://r.jina.ai/"
+  timeout_seconds: 60
+
+privacy:
+  jina_private_chats: false    # 私聊默认不走 Jina
+
+notify:
+  ws_enabled: true
+  qq_private_push: false
+  qq_rate_per_hour: 5
+
+schedule:
+  daily_cron: "0 7 * * *"
+  light_cron: "0 */2 * * *"
+  cleanup_cron: "30 23 * * *"
+  timezone: "Asia/Shanghai"
+
+bot:
+  # 群内被 @（或私聊）时以「鲸鱼娘顽皮女仆」人格回复
+  enabled: true
+  # 唯一被授权操作服务器 shell 的 QQ；其他人只会收到调皮回绝
+  control_qq: "3874095145"
+  # 机器人自身小号 QQ，用于 @ 检测兜底（OneBot 未上报 self_id 时）
+  self_qq: "3754609823"
+  # 直接执行命令的前缀（授权用户可用）
+  prefixes: ["/sh", "shell"]
+  max_iterations: 6            # 人格对话中模型调用命令的最大轮数
+  output_limit: 3500           # 单条命令回包最大字符数
+  history_turns: 12            # 每会话保留的上下文轮数
+  memory_top_n: 5              # 每轮对话注入的相关记忆碎片条数（0 亦可，默认 5）
+  persona_override: ""         # 留空使用内置人格

@@ -1,0 +1,8 @@
+# 运行时数据与本地配置（可能含密钥）不入库
+data/
+configs/config.yaml
+*.db
+*.db-shm
+*.db-wal
+/app
+/app.exe
