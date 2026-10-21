@@ -31,7 +31,6 @@ client/capacitor/ios/Pods/
 .eslintcache
 
 # ====== Server (Go) ======
-server/cmd/app
 server/server
 server/qqsched
 server/qqsched-*
