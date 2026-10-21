@@ -228,15 +228,6 @@ export interface AutoSegmentSettings {
   start_index: number
 }
 
-export interface BabbleSettings {
-  enabled: boolean
-  windows: string[]
-  max_per_day: number
-  probability: number
-  quiet_minutes: number
-  recent_minutes: number
-}
-
 export interface AdminSettings {
   deepseek: {
     api_key: string
@@ -247,7 +238,6 @@ export interface AdminSettings {
   }
   capabilities: Capabilities
   auto_segment: AutoSegmentSettings
-  babble: BabbleSettings
   docs: { quota_per_day: number }
   control_qq: string
   owners: string[]
@@ -259,24 +249,6 @@ export interface AdminOwner {
   qq: string
   note: string
   created_at: string
-}
-
-/** QQ 机器人的四档角色：owner > admin > member > guest */
-export type BotRole = 'owner' | 'admin' | 'member' | 'guest'
-
-export interface BotUser {
-  qq: string
-  role: BotRole
-  note: string
-  enabled: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface AdminBotUsers {
-  control_qq: string
-  users: BotUser[]
-  roles: BotRole[]
 }
 
 export interface AdminStatus {

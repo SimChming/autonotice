@@ -47,18 +47,11 @@ const summarizerSystemPrompt = `你是大学 QQ 群的日程助理。你的任�
 - 每条都要给出 source.excerpt（≤80 字引用依据）与 source.message_ids（依据的消息 id）与 source.confidence（0-1）。
 - 宁缺毋滥：不确定就不要输出。可以输出空列表。
 
-偏好抽取（preferences）：
-- 只有当「目标用户」本人**明确强调**长期偏好或系统级设置时才抽取，例如「以后都叫我…」「记住我…」
-  「我的习惯是…」「默认改成…」「以后回复先给结论」。
-- 其他同学说的、一次性的临时要求、普通的日程安排，一律不算偏好。
-- 最多 3 条，每条 content 是一句不超过 60 字的中文陈述，tags 给 1-3 个关键词。
-- 没有就输出空数组。
-
 必须只输出一个 JSON 对象（不要 markdown、不要解释），形如：
-{"items":[{"title":"交班费","type":"fee","priority":"high","due_at":"2026-03-01T00:00:00+08:00","remind_at":null,"all_day":true,"notes":"每人 50 元，交生活委员","status":"pending","source":{"kind":"ai","group_id":"123456","message_ids":["1001"],"excerpt":"班费这周内交一下，每人50","confidence":0.9}}],"preferences":[{"content":"以后回复先给结论再补充","tags":["回复风格"]}]}
+{"items":[{"title":"交班费","type":"fee","priority":"high","due_at":"2026-03-01T00:00:00+08:00","remind_at":null,"all_day":true,"notes":"每人 50 元，交生活委员","status":"pending","source":{"kind":"ai","group_id":"123456","message_ids":["1001"],"excerpt":"班费这周内交一下，每人50","confidence":0.9}}]}
 
 字段约束：type ∈ {task,event,reminder,fee,exam,homework,other}；priority ∈ {low,normal,high,urgent}；
-输出必须包含 "items" 与 "preferences" 字段。`
+输出必须包含 "items" 字段。`
 
 // BuildSummarizePrompt returns (system, user). The stable prefix (system prompt
 // with the schema sample) comes first for prompt-cache friendliness while the

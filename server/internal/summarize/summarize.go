@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -21,9 +20,6 @@ type Service struct {
 	client *Client
 	log    *slog.Logger
 	loc    *time.Location
-	// isOwner decides whether a QQ may publish system-level preferences.
-	// nil means "nobody" (safe default).
-	isOwner func(qq string) bool
 }
 
 // New builds the summarization service.
@@ -40,17 +36,13 @@ func New(st *store.Store, client *Client, log *slog.Logger, loc *time.Location) 
 // Client exposes the shared DeepSeek client so analyze can reuse it.
 func (s *Service) Client() *Client { return s.client }
 
-// SetOwnerChecker wires the 主人 check used to gate system-level preferences.
-func (s *Service) SetOwnerChecker(fn func(qq string) bool) { s.isOwner = fn }
-
 // RunOptions tunes a single summarization run.
 type RunOptions struct {
 	Now         time.Time
 	Lookback    time.Duration
 	MaxMessages int
-	// IgnoreLastSummary forces a full rescan of the lookback window and ignores
-	// the per-(user, group) summary cursor. Only an explicit "full" request uses
-	// this; the normal path always continues from the cursor.
+	// IgnoreLastSummary makes a manual replan re-read the whole lookback window
+	// instead of only the messages since the last successful summary.
 	IgnoreLastSummary bool
 }
 
@@ -93,8 +85,6 @@ type runPrep struct {
 	Prompt   string
 	Now      time.Time
 	Revision int64
-	// Since is the cursor this run started from (zero when it was a cold start).
-	Since time.Time
 }
 
 // prepareRun loads the messages, opens a summary_run row and builds the prompt.
@@ -108,22 +98,12 @@ func (s *Service) prepareRun(ctx context.Context, b store.Binding, opts RunOptio
 	if err != nil {
 		return nil, fmt.Errorf("get user state: %w", err)
 	}
-
-	// Each (user, group) pair carries its own pointer: a summary only reads what
-	// arrived after the previous one, so clicking "AI 总结" never re-hashes week-
-	// old chatter. A cold start falls back to the configured lookback window.
 	since := now.Add(-opts.lookback())
-	afterRow := int64(0)
-	if !opts.IgnoreLastSummary {
-		if cur, curErr := s.store.GetSummaryCursor(ctx, b.UserID, b.GroupID); curErr == nil {
-			since = cur.LastMsgTime
-			afterRow = cur.LastRowID
-		} else if !errors.Is(curErr, store.ErrNotFound) {
-			return nil, fmt.Errorf("get summary cursor: %w", curErr)
-		}
+	if state.LastSummaryAt != nil && !opts.IgnoreLastSummary {
+		since = *state.LastSummaryAt
 	}
 
-	msgs, err := s.store.QueryMessagesForUser(ctx, b.GroupID, b.QQUID, since, afterRow, opts.maxMessages())
+	msgs, err := s.store.QueryMessagesForUser(ctx, b.GroupID, b.QQUID, since, opts.maxMessages())
 	if err != nil {
 		return nil, fmt.Errorf("query messages: %w", err)
 	}
@@ -138,7 +118,7 @@ func (s *Service) prepareRun(ctx context.Context, b store.Binding, opts RunOptio
 		return nil, fmt.Errorf("insert summary run: %w", err)
 	}
 
-	prep := &runPrep{Run: run, Messages: msgs, Now: now, Revision: state.Revision, Since: since}
+	prep := &runPrep{Run: run, Messages: msgs, Now: now, Revision: state.Revision}
 	if len(msgs) == 0 {
 		return prep, nil
 	}
@@ -177,7 +157,6 @@ func (s *Service) RunForBinding(ctx context.Context, b store.Binding, opts RunOp
 	if len(prep.Messages) == 0 {
 		_ = s.store.FinishSummaryRun(ctx, prep.Run.ID, store.RunOK, 0, 0, prep.Revision, "")
 		_ = s.store.SetLastSummaryAt(ctx, b.UserID, prep.Now)
-		_ = s.store.SetSummaryCursor(ctx, b.UserID, b.GroupID, prep.Now, 0)
 		return nil
 	}
 
@@ -194,20 +173,20 @@ func (s *Service) RunForBinding(ctx context.Context, b store.Binding, opts RunOp
 		return err
 	}
 
-	incoming, prefs, err := parseAIItems(raw, b.GroupID, s.loc)
+	incoming, err := parseAIItems(raw, b.GroupID, s.loc)
 	if err != nil {
 		_ = s.store.FinishSummaryRun(ctx, prep.Run.ID, store.RunFailed, len(prep.Messages), 0, prep.Revision, err.Error())
 		return err
 	}
 
-	_, err = s.persist(ctx, b, prep, incoming, prefs, len(prep.Messages))
+	_, err = s.persist(ctx, b, prep, incoming, len(prep.Messages))
 	return err
 }
 
 // persist bumps the revision, merges the AI items into the stored schedule,
 // closes the summary run and returns how many items changed. Shared by the
 // scheduled and manual replan paths.
-func (s *Service) persist(ctx context.Context, b store.Binding, prep *runPrep, incoming []schedule.Item, prefs []aiPreference, msgCount int) (int, error) {
+func (s *Service) persist(ctx context.Context, b store.Binding, prep *runPrep, incoming []schedule.Item, msgCount int) (int, error) {
 	rev, err := s.store.BumpRevision(ctx, b.UserID)
 	if err != nil {
 		return 0, fmt.Errorf("bump revision: %w", err)
@@ -220,8 +199,6 @@ func (s *Service) persist(ctx context.Context, b store.Binding, prep *runPrep, i
 		}
 	}
 	_ = s.store.SetLastSummaryAt(ctx, b.UserID, prep.Now)
-	s.advanceCursor(ctx, b, prep)
-	s.savePreferences(ctx, b, prefs)
 	_ = s.store.SetUserDigest(ctx, b.UserID, schedule.Digest(merged))
 	if err := s.store.FinishSummaryRun(ctx, prep.Run.ID, store.RunOK, msgCount, len(changed), rev, ""); err != nil {
 		s.log.Warn("finish summary run", "err", err)
@@ -229,49 +206,6 @@ func (s *Service) persist(ctx context.Context, b store.Binding, prep *runPrep, i
 	s.log.Info("summarized", "user", b.UserID, "qq", b.QQUID, "messages", msgCount, "new_items", len(changed), "revision", rev)
 	prep.Revision = rev
 	return len(changed), nil
-}
-
-// advanceCursor moves the per-(user, group) pointer to the last message this
-// run actually consumed (or to "now" when there was nothing to read).
-func (s *Service) advanceCursor(ctx context.Context, b store.Binding, prep *runPrep) {
-	at, row := prep.Now, int64(0)
-	if n := len(prep.Messages); n > 0 {
-		last := prep.Messages[n-1]
-		if !last.MsgTime.IsZero() {
-			at = last.MsgTime
-		}
-		row = last.RowID
-	}
-	if err := s.store.SetSummaryCursor(ctx, b.UserID, b.GroupID, at, row); err != nil {
-		s.log.Warn("advance summary cursor", "user", b.UserID, "group", b.GroupID, "err", err)
-	}
-}
-
-// savePreferences publishes system-level preferences. Only the owner's words
-// count, and at most three per run, so a stray sentence cannot rewrite the
-// robot's behaviour for everyone.
-func (s *Service) savePreferences(ctx context.Context, b store.Binding, prefs []aiPreference) {
-	if len(prefs) == 0 || s.isOwner == nil || !s.isOwner(b.QQUID) {
-		return
-	}
-	if len(prefs) > 3 {
-		prefs = prefs[:3]
-	}
-	for _, p := range prefs {
-		content := strings.TrimSpace(p.Content)
-		if content == "" {
-			continue
-		}
-		if len([]rune(content)) > 120 {
-			content = string([]rune(content)[:120])
-		}
-		tags := strings.Join(p.Tags, ",")
-		if err := s.store.InsertPreference(ctx, b.QQUID, tags, content, store.MemoryScopeGlobal); err != nil {
-			s.log.Warn("save preference", "qq", b.QQUID, "err", err)
-			continue
-		}
-		s.log.Info("preference saved", "qq", b.QQUID, "content", content)
-	}
 }
 
 func userName(u *store.User) string {
@@ -301,28 +235,19 @@ type aiItem struct {
 	Source   aiSource `json:"source"`
 }
 
-// aiPreference is one system-level preference the model spotted in the chat.
-// Only published for the owner QQ; otherwise it is dropped.
-type aiPreference struct {
-	Content string   `json:"content"`
-	Tags    []string `json:"tags"`
-}
-
 type aiResult struct {
-	Items       []aiItem       `json:"items"`
-	Preferences []aiPreference `json:"preferences"`
+	Items []aiItem `json:"items"`
 }
 
 // parseAIItems validates the model output and converts it to schedule items.
-// It also returns the system-level preferences the model extracted.
-func parseAIItems(raw json.RawMessage, defaultGroup string, loc *time.Location) ([]schedule.Item, []aiPreference, error) {
+func parseAIItems(raw json.RawMessage, defaultGroup string, loc *time.Location) ([]schedule.Item, error) {
 	var res aiResult
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&res); err != nil {
 		// Fall back to lenient decoding before giving up on unknown fields.
 		if err2 := json.Unmarshal(raw, &res); err2 != nil {
-			return nil, nil, fmt.Errorf("summarize: decode items: %w", err2)
+			return nil, fmt.Errorf("summarize: decode items: %w", err2)
 		}
 	}
 	out := make([]schedule.Item, 0, len(res.Items))
@@ -361,13 +286,7 @@ func parseAIItems(raw json.RawMessage, defaultGroup string, loc *time.Location) 
 		it.ID = deriveItemID(it.Title, it.DueAt)
 		out = append(out, it)
 	}
-	prefs := make([]aiPreference, 0, len(res.Preferences))
-	for _, p := range res.Preferences {
-		if c := strings.TrimSpace(p.Content); c != "" {
-			prefs = append(prefs, aiPreference{Content: c, Tags: p.Tags})
-		}
-	}
-	return out, prefs, nil
+	return out, nil
 }
 
 // deriveItemID makes AI item ids stable across runs so merges are idempotent.

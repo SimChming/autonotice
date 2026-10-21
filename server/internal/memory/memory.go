@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/qqsched/server/internal/store"
@@ -39,44 +38,13 @@ func (s *Service) Remember(ctx context.Context, sessionKey, senderQQ, content st
 	}
 }
 
-// RememberPreference stores a system-level preference (only the owner is
-// allowed to create these, the caller enforces that).
-func (s *Service) RememberPreference(ctx context.Context, senderQQ, content string, tags []string, global bool) {
-	if s == nil || s.st == nil {
-		return
-	}
-	scope := store.MemoryScopePeer
-	if global {
-		scope = store.MemoryScopeGlobal
-	}
-	tag := strings.Join(dedupe(tags, 8), ",")
-	if err := s.st.InsertPreference(ctx, senderQQ, tag, content, scope); err != nil {
-		s.log.Warn("store preference", "qq", senderQQ, "err", err)
-	}
-}
-
-// Preferences returns the long-lived preference lines injected into every
-// prompt: global ones plus this speaker's own.
-func (s *Service) Preferences(ctx context.Context, senderQQ string, limit int) []store.Memory {
-	if s == nil || s.st == nil {
-		return nil
-	}
-	out, err := s.st.ListPreferences(ctx, senderQQ, limit)
-	if err != nil {
-		s.log.Warn("list preferences", "qq", senderQQ, "err", err)
-		return nil
-	}
-	return out
-}
-
 // Recall returns the fragments most relevant to the current message, best first.
-// Candidates span both the current chat and this speaker's other chats, so a
-// person met in private is still recognised when they speak in a group.
 func (s *Service) Recall(ctx context.Context, sessionKey, senderQQ, query string, limit int) []store.Memory {
 	if s == nil || s.st == nil || limit <= 0 || sessionKey == "" {
 		return nil
 	}
-	cands, err := s.st.RecallMemories(ctx, sessionKey, senderQQ, limit)
+	terms := Keywords(query)
+	cands, err := s.st.SearchMemories(ctx, sessionKey, terms, limit)
 	if err != nil {
 		s.log.Warn("recall memories", "session", sessionKey, "err", err)
 		return nil
@@ -84,44 +52,23 @@ func (s *Service) Recall(ctx context.Context, sessionKey, senderQQ, query string
 	if len(cands) == 0 {
 		return nil
 	}
-	terms := Keywords(query)
-	now := time.Now()
 
 	type scored struct {
 		m     store.Memory
-		score float64
+		score int
 	}
 	ranked := make([]scored, 0, len(cands))
 	for _, m := range cands {
 		hay := strings.ToLower(m.Content + " " + m.Tags)
-		hits := 0
+		score := 0
 		for _, t := range terms {
 			if strings.Contains(hay, t) {
-				hits++
+				score += 2
 			}
 		}
-		score := float64(hits) * 2
-		// Same speaker and same chat are both strong signals.
+		// Fragments that came from the same speaker matter more in a group.
 		if senderQQ != "" && m.SenderQQ == senderQQ {
 			score += 3
-		}
-		if m.SessionKey == sessionKey {
-			score += 1.5
-		}
-		// Gentle recency bonus: things from the last week outrank old trivia.
-		age := now.Sub(m.CreatedAt)
-		switch {
-		case age < 24*time.Hour:
-			score += 2
-		case age < 7*24*time.Hour:
-			score += 1
-		case age > 90*24*time.Hour:
-			score -= 1
-		}
-		// With no keyword hit, only keep very recent same-speaker fragments,
-		// otherwise irrelevant trivia floods the prompt.
-		if hits == 0 && score < 4.5 {
-			continue
 		}
 		ranked = append(ranked, scored{m: m, score: score})
 	}

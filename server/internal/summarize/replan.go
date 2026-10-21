@@ -53,7 +53,6 @@ func (s *Service) RunReplan(
 		emitPhase(em, "done", "该时间窗内没有与你相关的消息")
 		_ = s.store.FinishSummaryRun(ctx, prep.Run.ID, store.RunOK, 0, 0, prep.Revision, "")
 		_ = s.store.SetLastSummaryAt(ctx, b.UserID, prep.Now)
-		_ = s.store.SetSummaryCursor(ctx, b.UserID, b.GroupID, prep.Now, 0)
 		return &ReplanResult{Revision: prep.Revision, Skipped: true}, nil
 	}
 
@@ -93,14 +92,14 @@ func (s *Service) RunReplan(
 			return nil, err
 		}
 	}
-	incoming, prefs, err := parseAIItems(raw, b.GroupID, s.loc)
+	incoming, err := parseAIItems(raw, b.GroupID, s.loc)
 	if err != nil {
 		_ = s.store.FinishSummaryRun(ctx, prep.Run.ID, store.RunFailed, len(prep.Messages), 0, prep.Revision, err.Error())
 		return nil, err
 	}
 
 	emitPhase(em, "persisting", "正在写入日程…")
-	changed, err := s.persist(ctx, b, prep, incoming, prefs, len(prep.Messages))
+	changed, err := s.persist(ctx, b, prep, incoming, len(prep.Messages))
 	if err != nil {
 		return nil, err
 	}

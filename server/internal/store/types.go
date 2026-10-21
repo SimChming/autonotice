@@ -38,8 +38,6 @@ type Group struct {
 
 // Message is one normalized inbound chat message.
 type Message struct {
-	// RowID 是 SQLite 的隐式自增行号，仅用于「总结指针」做同秒内的精确游标。
-	RowID        int64     `json:"-"`
 	ID           string    `json:"id"`
 	GroupID      string    `json:"group_id"`
 	MessageID    string    `json:"message_id"`
@@ -107,10 +105,10 @@ type SummaryRun struct {
 // ContentAsset is one recognized file / link / miniapp card with its fetch
 // result and blocked verdict.
 type ContentAsset struct {
-	ID        string `json:"id"`
-	GroupID   string `json:"group_id"`
-	MessageID string `json:"message_id"`
-	SenderQQ  string `json:"sender_qq"`
+	ID            string     `json:"id"`
+	GroupID       string     `json:"group_id"`
+	MessageID     string     `json:"message_id"`
+	SenderQQ      string     `json:"sender_qq"`
 	// MessageType: "group" | "private" — 告警来源区分用。
 	MessageType   string     `json:"message_type"`
 	Kind          string     `json:"kind"`

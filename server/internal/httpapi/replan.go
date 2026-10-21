@@ -75,11 +75,10 @@ func (a *api) replanStream(w http.ResponseWriter, r *http.Request) {
 		if ctx.Err() != nil {
 			return
 		}
-		// 默认只处理「上次总结指针之后的」新消息；显式 ?full=1 才整窗重扫。
 		opts := summarize.RunOptions{
 			Lookback:          lookback,
 			MaxMessages:       400,
-			IgnoreLastSummary: r.URL.Query().Get("full") == "1",
+			IgnoreLastSummary: true,
 		}
 		res, err := a.Summarizer.RunReplan(ctx, b, opts, em)
 		if err != nil {

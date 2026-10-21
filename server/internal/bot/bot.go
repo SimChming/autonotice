@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -42,8 +41,6 @@ type Config struct {
 	HistoryTurns    int
 	PersonaOverride string
 	MemoryTopN      int
-	// Location drives the "冒泡" time windows; nil falls back to Asia/Shanghai.
-	Location *time.Location
 }
 
 func (c Config) normalized() Config {
@@ -67,9 +64,6 @@ func (c Config) normalized() Config {
 	}
 	c.ControlQQ = strings.TrimSpace(c.ControlQQ)
 	c.SelfQQ = strings.TrimSpace(c.SelfQQ)
-	if c.Location == nil {
-		c.Location, _ = time.LoadLocation("Asia/Shanghai")
-	}
 	return c
 }
 
@@ -88,19 +82,6 @@ type Service struct {
 	hist     *history
 	rate     *limiter
 	seq      atomic.Uint64
-	loc      *time.Location
-	// lastBabbleAt keyed by group id keeps the robot from double-posting in the
-	// same group within the quiet period.
-	babbleMu   sync.Mutex
-	babbleSeen map[string]time.Time
-	// sessions already hydrated from the persisted turn table.
-	sessionMu     sync.Mutex
-	sessionLoaded map[string]bool
-	// cached QQ->role map, refreshed lazily so permission changes take effect
-	// without a restart.
-	rolesMu sync.RWMutex
-	roles   map[string]string
-	rolesAt time.Time
 }
 
 // New builds the bot controller. runtime, docSvc, st and agentSvc may be nil in tests.
@@ -110,23 +91,18 @@ func New(cfg Config, api onebot.APICaller, sh *shellctl.Manager, llm *summarize.
 	}
 	cfg = cfg.normalized()
 	return &Service{
-		cfg:        cfg,
-		api:        api,
-		sh:         sh,
-		llm:        llm,
-		mem:        mem,
-		settings:   runtime,
-		docs:       docSvc,
-		st:         st,
-		agent:      agentSvc,
-		log:        log,
-		hist:       newHistory(2*time.Hour, cfg.HistoryTurns),
-		rate:       newLimiter(),
-		loc:        cfg.Location,
-		babbleSeen: map[string]time.Time{},
-
-		sessionLoaded: map[string]bool{},
-		roles:         map[string]string{},
+		cfg:      cfg,
+		api:      api,
+		sh:       sh,
+		llm:      llm,
+		mem:      mem,
+		settings: runtime,
+		docs:     docSvc,
+		st:       st,
+		agent:    agentSvc,
+		log:      log,
+		hist:     newHistory(2*time.Hour, cfg.HistoryTurns),
+		rate:     newLimiter(),
 	}
 }
 
@@ -382,21 +358,6 @@ func (s *Service) runCommand(ctx context.Context, ev onebot.Event, command strin
 type aiMemory struct {
 	Content string   `json:"content"`
 	Tags    []string `json:"tags"`
-	// Scope: "system" 表示主人强调的系统级长期偏好，会在之后每一轮注入。
-	Scope string `json:"scope"`
-}
-
-// aiSegment is one planned outbound message. Segments are executed in order
-// with randomized delays, and an optional API/Autonotice action may sit between
-// two segments (send an image, push a reminder) so the multi-message reply
-// reads as one continuous train of thought instead of unrelated one-liners.
-type aiSegment struct {
-	Text       string    `json:"text"`
-	API        *aiAPI    `json:"api"`
-	Autonotice *aiAction `json:"autonotice"`
-	// WaitMS is the desired pause before this segment; 0 lets the server pick a
-	// random delay inside the configured auto-segment window.
-	WaitMS int `json:"wait_ms"`
 }
 
 // aiAPI is a model-emitted OneBot action call (any NapCat v11 action).
@@ -422,14 +383,13 @@ type aiDoc struct {
 }
 
 type aiReply struct {
-	Reply      string      `json:"reply"`
-	Command    *string     `json:"command"`
-	API        *aiAPI      `json:"api"`
-	Autonotice *aiAction   `json:"autonotice"`
-	Memory     *aiMemory   `json:"memory"`
-	Followups  []string    `json:"followups"`
-	Segments   []aiSegment `json:"segments"`
-	Doc        *aiDoc      `json:"doc"`
+	Reply      string    `json:"reply"`
+	Command    *string   `json:"command"`
+	API        *aiAPI    `json:"api"`
+	Autonotice *aiAction `json:"autonotice"`
+	Memory     *aiMemory `json:"memory"`
+	Followups  []string  `json:"followups"`
+	Doc        *aiDoc    `json:"doc"`
 }
 
 // chat runs the persona conversation. allowShell is false for everyone except
@@ -440,9 +400,6 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images
 	if s.llm == nil || !s.llm.Configured() {
 		return s.send(ctx, ev, "🐋 呜…主人的鲸鱼脑有点晕，等下再试喵~")
 	}
-	// L0: restore the working buffer from the persisted turn table after a
-	// restart, so the robot does not forget the conversation.
-	s.ensureSession(ctx, key)
 
 	// Recall relevant fragments from the database first: injecting a few lines
 	// of long-term memory keeps the prompt (and the token bill) small.
@@ -452,9 +409,6 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images
 			memBlock = renderMemories(frags)
 		}
 	}
-	// 系统级偏好每轮都注入（数量很少），不依赖关键词命中。
-	prefBlock := s.preferenceBlock(ctx, ev.UserID)
-	sumBlock := s.summaryBlock(ctx, key)
 	draftBlock := s.draftBlock(ctx, key)
 	sourceText := s.extractSourceText(ctx, ev)
 	capBlock := s.capabilityBlock()
@@ -464,12 +418,12 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images
 	if histText == "" && len(images) > 0 {
 		histText = "[发送了一张图片]"
 	}
-	turns := s.recordTurn(ctx, key, "user", ev.UserID, histText)
+	turns := s.hist.appendUser(key, ev.UserID, histText)
 	final := ""
 	var last aiReply
 	for i := 0; i < s.cfg.MaxIterations; i++ {
 		callCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		prompt := s.buildPrompt(memBlock, prefBlock, sumBlock, turns, ev, allowShell, draftBlock, sourceText, capBlock, agentBlock)
+		prompt := s.buildPrompt(memBlock, turns, ev, allowShell, draftBlock, sourceText, capBlock, agentBlock)
 		if len(images) > 0 && i == 0 {
 			prompt += "\n【用户刚刚发送了图片，请直接查看图片内容（文字/画面）并据此回答，不要声称自己看不到图片。】"
 		}
@@ -493,30 +447,17 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images
 		if reply := strings.TrimSpace(parsed.Reply); reply != "" {
 			final = reply
 		}
-		// A segmented reply is a plan, not a tool call: stop the loop and let the
-		// sender execute the whole sequence (with actions in between) in order.
-		if len(parsed.Segments) > 0 {
-			break
-		}
 		// Autonotice action tool-call: the robot is part of the Autonotice
 		// system and can drive the speaker's own clients (reminders, alarms,
 		// schedules) — never someone else's unless the speaker is the owner.
 		if parsed.Autonotice != nil && strings.TrimSpace(parsed.Autonotice.Action) != "" {
-			if !s.canAct(ev.UserID) {
-				turns = s.recordTurn(ctx, key, "tool", "", "无权限: 当前 QQ 是访客，系统能力未开放。请用文字回复对方。")
-				continue
-			}
-			turns = s.recordTurn(ctx, key, "tool", "", s.runAutonotice(ctx, ev, parsed.Autonotice))
+			turns = s.hist.append(key, "tool", s.runAutonotice(ctx, ev, parsed.Autonotice))
 			continue
 		}
 		// OneBot action tool-call first: the model can drive any NapCat API
 		// (send images, query group info, ...), see the result, and continue.
 		if parsed.API != nil && strings.TrimSpace(parsed.API.Action) != "" {
-			if !s.canAct(ev.UserID) {
-				turns = s.recordTurn(ctx, key, "tool", "", "无权限: 当前 QQ 是访客，系统能力未开放。请用文字回复对方。")
-				continue
-			}
-			turns = s.recordTurn(ctx, key, "tool", "", s.runOnebotAPI(ctx, parsed.API))
+			turns = s.hist.append(key, "tool", s.runOnebotAPI(ctx, parsed.API))
 			continue
 		}
 		cmd := ""
@@ -534,62 +475,36 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images
 		cmdCtx, cancel2 := context.WithTimeout(ctx, 60*time.Second)
 		out, code, runErr := s.sh.Run(cmdCtx, key, cmd)
 		cancel2()
-		turns = s.recordTurn(ctx, key, "tool", "", toolTurn(cmd, out, code, runErr))
+		turns = s.hist.append(key, "tool", toolTurn(cmd, out, code, runErr))
 	}
 
 	if last.Doc != nil {
 		final = s.handleDoc(ctx, ev, key, last.Doc, final)
 	}
 
-	// Persist whatever the model judged worth remembering long-term. Only the
-	// owner may publish system-level preferences; everyone else's note stays a
-	// per-session fragment.
+	if final == "" {
+		final = "🐋 呜…主人的鲸鱼脑有点晕，等下再试喵~"
+	}
+	s.hist.append(key, "assistant", final)
+
+	// Persist whatever the model judged worth remembering long-term.
 	if s.mem != nil && last.Memory != nil {
 		content := strings.TrimSpace(last.Memory.Content)
 		if content != "" {
-			system := strings.EqualFold(strings.TrimSpace(last.Memory.Scope), "system")
-			if system && s.isOwner(ev.UserID) {
-				s.mem.RememberPreference(ctx, ev.UserID, content, last.Memory.Tags, true)
-			} else {
-				s.mem.Remember(ctx, key, ev.UserID, content, last.Memory.Tags)
-			}
+			s.mem.Remember(ctx, key, ev.UserID, content, last.Memory.Tags)
 		}
 	}
 	final = sanitizeCQ(final, s.capabilities())
-	main, segments := s.replyPlan(ctx, ev, final, last)
-	if strings.TrimSpace(main) == "" {
-		main = "🐋 呜…主人的鲸鱼脑有点晕，等下再试喵~"
-	}
-	s.recordTurn(ctx, key, "assistant", "", main)
+	main, extra := s.followupPlan(ev, final, last.Followups)
 	if err := s.send(ctx, ev, main); err != nil {
 		return err
 	}
-	// L1: compress older turns in the background once the buffer grows.
-	go s.maybeSummarize(ctx, key)
-	// Detach from the websocket handler: the extra segments sleep between sends
-	// (and may fire OneBot/Autonotice actions in between), so the event loop must
-	// stay free to accept the next message.
-	if len(segments) > 0 {
-		go s.runSegments(context.WithoutCancel(ctx), ev, segments)
+	// Detach from the websocket handler: the extra segments sleep between sends,
+	// and the event loop must stay free to accept the next message.
+	if len(extra) > 0 {
+		go s.sendFollowups(context.WithoutCancel(ctx), ev, extra)
 	}
 	return nil
-}
-
-// preferenceBlock renders the owner's system-level preferences (global + own).
-func (s *Service) preferenceBlock(ctx context.Context, senderQQ string) string {
-	if s.mem == nil {
-		return ""
-	}
-	frags := s.mem.Preferences(ctx, senderQQ, 12)
-	if len(frags) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("【长期偏好（主人明确强调过，必须始终遵守，不必每轮复述）】\n")
-	for _, m := range frags {
-		b.WriteString("- " + truncateRunes(m.Content, 120) + "\n")
-	}
-	return b.String()
 }
 
 // handleDoc executes a model-emitted document step: collect missing slots
@@ -890,19 +805,15 @@ func toolTurn(cmd, out string, code int, err error) string {
 	return b.String()
 }
 
-func (s *Service) buildPrompt(memBlock, prefBlock, sumBlock string, turns []turn, ev onebot.Event, allowShell bool, draftBlock, sourceText, capBlock, agentBlock string) string {
+func (s *Service) buildPrompt(memBlock string, turns []turn, ev onebot.Event, allowShell bool, draftBlock, sourceText, capBlock, agentBlock string) string {
 	var b strings.Builder
 	// Tell the model exactly who it is talking to: in a group session the
 	// history mixes master and classmates, so an explicit identity line is the
 	// only reliable way to keep "主人" reserved for ControlQQ.
-	b.WriteString("【当前对话对象】QQ=" + ev.UserID + "，身份=" + s.identityLabel(ev.UserID) + "\n\n")
-	if sumBlock != "" {
-		b.WriteString(sumBlock)
-		b.WriteString("\n")
-	}
-	if prefBlock != "" {
-		b.WriteString(prefBlock)
-		b.WriteString("\n")
+	if allowShell {
+		b.WriteString("【当前对话对象】QQ=" + ev.UserID + "，身份=主人（你的服务器管理员，可以执行 shell）\n\n")
+	} else {
+		b.WriteString("【当前对话对象】QQ=" + ev.UserID + "，身份=普通同学（不是主人，没有 shell 权限）\n\n")
 	}
 	if memBlock != "" {
 		b.WriteString("【相关记忆碎片（来自数据库，供参考，不必逐条复述）】\n")
@@ -939,36 +850,17 @@ func (s *Service) buildPrompt(memBlock, prefBlock, sumBlock string, turns []turn
 	}
 	if !allowShell {
 		b.WriteString("\n注意：当前对话者不是主人，你没有 shell 权限，command 必须为 null。")
-		if !s.canAct(ev.UserID) {
-			b.WriteString("对方是访客，api / autonotice 动作也必须为 null，只能文字聊天。")
-		}
 		b.WriteString("如果对方要求执行命令或要权限，就用调皮的话拒绝他。\n")
 	}
 	b.WriteString("\n请根据以上记录回复对方最新的一条消息，只输出约定的那个 JSON 对象。")
 	return b.String()
 }
 
-// identityLabel describes the speaker's permissions to the model.
-func (s *Service) identityLabel(qq string) string {
-	switch s.roleOf(qq) {
-	case store.RoleOwner:
-		return "主人（你的服务器管理员，可以执行 shell）"
-	case store.RoleAdmin:
-		return "管理员（可驱动系统能力，但没有 shell 权限）"
-	case store.RoleGuest:
-		return "访客（只能聊天，系统能力已关闭）"
-	}
-	return "普通同学（可使用系统能力，没有 shell 权限）"
-}
-
 // userLabel renders a history speaker tag: only owner QQs are 主人, everyone
 // else is a classmate identified by QQ number.
 func (s *Service) userLabel(sender string) string {
-	switch s.roleOf(sender) {
-	case store.RoleOwner:
+	if s.isOwner(sender) {
 		return "主人"
-	case store.RoleAdmin:
-		return "管理员(QQ" + sender + ")"
 	}
 	if sender == "" {
 		return "同学"
@@ -976,10 +868,23 @@ func (s *Service) userLabel(sender string) string {
 	return "同学(QQ" + sender + ")"
 }
 
-// isOwner reports whether a QQ carries 主人 privileges (built-in control QQ, the
-// DB role table, or the legacy owner list).
+// isOwner reports whether a QQ carries 主人 privileges (built-in control QQ or
+// an entry from the admin-maintained owner list).
 func (s *Service) isOwner(qq string) bool {
-	return s.roleOf(qq) == store.RoleOwner
+	if qq == "" {
+		return false
+	}
+	if s.cfg.ControlQQ != "" && qq == s.cfg.ControlQQ {
+		return true
+	}
+	if s.settings != nil {
+		for _, o := range s.settings.Snapshot().OwnerQQs {
+			if o == qq {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // --- replies ---
@@ -1001,7 +906,7 @@ func (s *Service) send(ctx context.Context, ev onebot.Event, text string) error 
 	}
 	group := ev.IsGroup() && ev.GroupID != ""
 	var lastErr error
-	for _, chunk := range splitMessage(text, 1500) {
+	for _, chunk := range chunkRunes(text, 1500) {
 		body := chunk
 		if group {
 			body = fmt.Sprintf("[CQ:at,qq=%s] %s", ev.UserID, chunk)
@@ -1062,152 +967,36 @@ func (s *Service) capabilityBlock() string {
 	return "【管理员已关闭的能力】" + strings.Join(off, "、") + "。不要尝试通过 api 调用或 CQ 码发送这些内容。\n"
 }
 
-// replyPlan turns the model's multi-message plan into the first message plus
-// the ordered extra segments. Explicit segments win (they may carry an API /
-// Autonotice action between two messages); legacy followups are accepted as
-// plain text segments; with neither, a long multi-sentence reply is split
-// locally so the feature still takes effect.
-func (s *Service) replyPlan(ctx context.Context, ev onebot.Event, reply string, last aiReply) (string, []aiSegment) {
-	seg := settings.DefaultAutoSegment()
-	split := false
-	if s.settings != nil {
-		seg = s.settings.Snapshot().AutoSegment
-		split = seg.Enabled && followupTarget(seg, ev.UserID, s.isOwner(ev.UserID))
-	}
-	caps := s.capabilities()
-	planned := make([]aiSegment, 0, len(last.Segments)+len(last.Followups))
-	for _, sg := range last.Segments {
-		sg.Text = strings.TrimSpace(sanitizeCQ(sg.Text, caps))
-		if sg.Text == "" && emptyAPI(sg.API) && emptyAction(sg.Autonotice) {
-			continue
-		}
-		planned = append(planned, sg)
-	}
-	if len(planned) == 0 {
-		for _, fu := range last.Followups {
-			if fu = strings.TrimSpace(sanitizeCQ(fu, caps)); fu != "" {
-				planned = append(planned, aiSegment{Text: fu})
-			}
-		}
-	}
-	if !split {
-		// Splitting may be off (or this speaker is not whitelisted), but planned
-		// actions must still run — otherwise "send me the picture" silently does
-		// nothing. Execute them now and fold their text into one message.
-		for _, sg := range planned {
-			if !emptyAction(sg.Autonotice) {
-				s.runAutonotice(ctx, ev, sg.Autonotice)
-			}
-			if !emptyAPI(sg.API) {
-				s.runOnebotAPI(ctx, sg.API)
-			}
-			if t := strings.TrimSpace(sg.Text); t != "" {
-				if strings.TrimSpace(reply) != "" {
-					reply += "\n"
-				}
-				reply += t
-			}
-		}
+// followupPlan decides whether the answer should be split into several chat
+// messages. It returns the (possibly shortened) main reply plus the extra
+// segments to send afterwards. When auto-segment is on but the model returned no
+// followups, a long multi-sentence reply is split locally so the feature still
+// takes effect.
+func (s *Service) followupPlan(ev onebot.Event, reply string, parts []string) (string, []string) {
+	if s.settings == nil {
 		return reply, nil
 	}
-	if len(planned) == 0 {
+	seg := s.settings.Snapshot().AutoSegment
+	if !seg.Enabled || !followupTarget(seg, ev.UserID, s.isOwner(ev.UserID)) {
+		return reply, nil
+	}
+	clean := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			clean = append(clean, p)
+		}
+	}
+	if len(clean) == 0 {
 		all := autoSplit(reply, seg.MaxSegments+1)
 		if len(all) < 2 {
 			return reply, nil
 		}
-		reply = all[0]
-		for _, part := range all[1:] {
-			planned = append(planned, aiSegment{Text: part})
-		}
+		reply, clean = all[0], all[1:]
 	}
-	if len(planned) > seg.MaxSegments {
-		planned = planned[:seg.MaxSegments]
+	if len(clean) > seg.MaxSegments {
+		clean = clean[:seg.MaxSegments]
 	}
-	// The model sometimes leaves reply empty and puts everything in segments;
-	// promote the first text-only segment so the sequence still starts normally.
-	if strings.TrimSpace(reply) == "" && len(planned) > 0 &&
-		strings.TrimSpace(planned[0].Text) != "" &&
-		emptyAPI(planned[0].API) && emptyAction(planned[0].Autonotice) {
-		reply = planned[0].Text
-		planned = planned[1:]
-	}
-	return reply, planned
-}
-
-// runSegments delivers the planned extra messages in order, pausing between
-// them and executing each segment's planned action right before its text, so a
-// multi-message reply keeps a single train of thought. It runs detached from
-// the websocket handler.
-func (s *Service) runSegments(ctx context.Context, ev onebot.Event, segs []aiSegment) {
-	if len(segs) == 0 || s.api == nil {
-		return
-	}
-	seg := settings.DefaultAutoSegment()
-	if s.settings != nil {
-		seg = s.settings.Snapshot().AutoSegment
-	}
-	minDelay, maxDelay := seg.MinDelayMS, seg.MaxDelayMS
-	if minDelay < 0 {
-		minDelay = 0
-	}
-	if maxDelay < minDelay {
-		maxDelay = minDelay
-	}
-	for i, sg := range segs {
-		// Message numbers start at 2: the main reply was already delivered.
-		if i+2 < seg.StartIndex {
-			continue
-		}
-		delay := sg.WaitMS
-		if delay <= 0 {
-			delay = minDelay
-			if maxDelay > minDelay {
-				delay += rand.Intn(maxDelay - minDelay + 1)
-			}
-		}
-		if delay > maxSegmentWaitMS {
-			delay = maxSegmentWaitMS
-		}
-		if !sleepCtx(ctx, time.Duration(delay)*time.Millisecond) {
-			return
-		}
-		if !emptyAction(sg.Autonotice) {
-			s.runAutonotice(ctx, ev, sg.Autonotice)
-		}
-		if !emptyAPI(sg.API) {
-			s.runOnebotAPI(ctx, sg.API)
-		}
-		if strings.TrimSpace(sg.Text) == "" {
-			continue
-		}
-		if err := s.send(ctx, ev, sg.Text); err != nil {
-			return
-		}
-		s.recordTurn(ctx, s.sessionKey(ev), "assistant", "", sg.Text)
-	}
-}
-
-// maxSegmentWaitMS caps a model-requested pause so a bad wait_ms cannot stall
-// the sequence for minutes.
-const maxSegmentWaitMS = 8000
-
-func emptyAPI(a *aiAPI) bool { return a == nil || strings.TrimSpace(a.Action) == "" }
-
-func emptyAction(a *aiAction) bool { return a == nil || strings.TrimSpace(a.Action) == "" }
-
-// sleepCtx waits for d or returns false when the context is cancelled.
-func sleepCtx(ctx context.Context, d time.Duration) bool {
-	if d <= 0 {
-		return true
-	}
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
+	return reply, clean
 }
 
 // followupTarget reports whether this chat partner may receive extra segments.
@@ -1269,6 +1058,56 @@ func autoSplit(reply string, maxParts int) []string {
 	return merged
 }
 
+// sendFollowups delivers extra segments with a randomized delay. It is called in
+// a detached goroutine, so a cancelled websocket context never cuts it short.
+func (s *Service) sendFollowups(ctx context.Context, ev onebot.Event, parts []string) {
+	if len(parts) == 0 || s.settings == nil || s.api == nil {
+		return
+	}
+	seg := s.settings.Snapshot().AutoSegment
+	if !seg.Enabled || !followupTarget(seg, ev.UserID, s.isOwner(ev.UserID)) {
+		return
+	}
+	minDelay, maxDelay := seg.MinDelayMS, seg.MaxDelayMS
+	if minDelay < 0 {
+		minDelay = 0
+	}
+	if maxDelay < minDelay {
+		maxDelay = minDelay
+	}
+	caps := s.capabilities()
+	sent := 0
+	for i, part := range parts {
+		if sent >= seg.MaxSegments {
+			return
+		}
+		if i+2 < seg.StartIndex {
+			continue
+		}
+		part = strings.TrimSpace(sanitizeCQ(part, caps))
+		if part == "" {
+			continue
+		}
+		delay := time.Duration(minDelay) * time.Millisecond
+		if maxDelay > minDelay {
+			delay += time.Duration(rand.Intn(maxDelay-minDelay+1)) * time.Millisecond
+		}
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+		}
+		if err := s.send(ctx, ev, part); err != nil {
+			return
+		}
+		sent++
+	}
+}
+
 func truncateRunes(s string, n int) string {
 	if n <= 0 {
 		return s
@@ -1278,4 +1117,23 @@ func truncateRunes(s string, n int) string {
 		return s
 	}
 	return string(r[:n]) + "\n…（输出过长，已截断）"
+}
+
+func chunkRunes(s string, size int) []string {
+	if size <= 0 {
+		return []string{s}
+	}
+	r := []rune(s)
+	if len(r) <= size {
+		return []string{s}
+	}
+	var out []string
+	for i := 0; i < len(r); i += size {
+		end := i + size
+		if end > len(r) {
+			end = len(r)
+		}
+		out = append(out, string(r[i:end]))
+	}
+	return out
 }
