@@ -1,0 +1,11 @@
+.git
+node_modules
+**/node_modules
+**/dist
+**/.tsbuildinfo
+coverage
+release
+data
+napcat
+apps/client/node_modules
+apps/client/dist

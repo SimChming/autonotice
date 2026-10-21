@@ -1,0 +1,7 @@
+# 上服务器的一切文本文件强制 LF（§9-坑3：CRLF 会引发 400/解析错）
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.jpg binary
+*.ico binary

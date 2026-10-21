@@ -1,0 +1,27 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# 运行时数据与密钥（永不入库）
+.env
+data/
+napcat/
+logs/
+*.db
+*.db-wal
+*.db-shm
+migration/old-app.db
+deploy/.env
+
+# 构建产物（客户端壳）
+release/
+apps/shells/android/**/build/
+apps/shells/android/.gradle/
+apps/shells/desktop/target/
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

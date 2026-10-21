@@ -1,0 +1,25 @@
+services:
+  server:
+    image: ghcr.io/simchming/autonotice-server:latest
+    container_name: autonotice-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      - "./data:/app/data"
+    depends_on:
+      - napcat
+    mem_limit: 512m
+
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    container_name: autonotice-napcat
+    restart: unless-stopped
+    environment:
+      - ACCOUNT=3754609823
+    ports:
+      - "6099:6099"
+    volumes:
+      - "./napcat:/app/napcat"
+    mem_limit: 768m
