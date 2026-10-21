@@ -236,6 +236,7 @@ func (a *api) adminSettingsView(snap *settings.Settings) map[string]any {
 		"capabilities":   snap.Capabilities,
 		"auto_segment":   snap.AutoSegment,
 		"docs":           snap.Docs,
+		"babble":         snap.Babble,
 		"control_qq":     a.ControlQQ,
 		"owners":         snap.OwnerQQs,
 		"pdf_font_ready": pdfReady,

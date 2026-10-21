@@ -11,6 +11,15 @@ import (
 // the cap are trimmed on insert so a chatty group cannot grow unbounded.
 const memoryCap = 200
 
+// Memory kinds / scopes.
+const (
+	MemoryKindChat       = "chat"
+	MemoryKindPreference = "preference"
+
+	MemoryScopePeer   = "peer"
+	MemoryScopeGlobal = "global"
+)
+
 // Memory is one long-lived conversational fragment kept for a chat peer.
 type Memory struct {
 	ID         int64     `json:"id"`
@@ -18,6 +27,8 @@ type Memory struct {
 	SenderQQ   string    `json:"sender_qq"`
 	Tags       string    `json:"tags"`
 	Content    string    `json:"content"`
+	Kind       string    `json:"kind"`
+	Scope      string    `json:"scope"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
@@ -28,8 +39,10 @@ func (s *Store) InsertMemory(ctx context.Context, sessionKey, senderQQ, tags, co
 		return nil
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO memories (session_key, sender_qq, tags, content, created_at) VALUES (?, ?, ?, ?, ?)`,
-		sessionKey, strings.TrimSpace(senderQQ), strings.TrimSpace(tags), content, time.Now().Unix()); err != nil {
+		`INSERT INTO memories (session_key, sender_qq, tags, content, kind, scope, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		sessionKey, strings.TrimSpace(senderQQ), strings.TrimSpace(tags), content,
+		MemoryKindChat, MemoryScopePeer, time.Now().Unix()); err != nil {
 		return fmt.Errorf("insert memory: %w", err)
 	}
 	if _, err := s.db.ExecContext(ctx,
@@ -57,8 +70,9 @@ func (s *Store) SearchMemories(ctx context.Context, sessionKey string, terms []s
 		fetch = memoryCap
 	}
 
-	query := `SELECT id, session_key, sender_qq, tags, content, created_at FROM memories WHERE session_key = ?`
-	args := []any{sessionKey}
+	query := `SELECT id, session_key, sender_qq, tags, content, kind, scope, created_at
+	          FROM memories WHERE session_key = ? AND kind = ?`
+	args := []any{sessionKey, MemoryKindChat}
 	if cleaned := cleanTerms(terms); len(cleaned) > 0 {
 		clauses := make([]string, 0, len(cleaned)*2)
 		for _, t := range cleaned {
@@ -80,7 +94,64 @@ func (s *Store) SearchMemories(ctx context.Context, sessionKey string, terms []s
 	for rows.Next() {
 		var m Memory
 		var created int64
-		if err := rows.Scan(&m.ID, &m.SessionKey, &m.SenderQQ, &m.Tags, &m.Content, &created); err != nil {
+		if err := rows.Scan(&m.ID, &m.SessionKey, &m.SenderQQ, &m.Tags, &m.Content, &m.Kind, &m.Scope, &created); err != nil {
+			return nil, err
+		}
+		m.CreatedAt = time.Unix(created, 0).UTC()
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// InsertPreference stores a system-level preference. Duplicate content in the
+// same scope refreshes the timestamp instead of piling up copies.
+func (s *Store) InsertPreference(ctx context.Context, senderQQ, tags, content, scope string) error {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return nil
+	}
+	if scope != MemoryScopeGlobal {
+		scope = MemoryScopePeer
+	}
+	sessionKey := "pref:" + strings.TrimSpace(senderQQ)
+	if scope == MemoryScopeGlobal {
+		sessionKey = "global"
+	}
+	now := time.Now().Unix()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO memories (session_key, sender_qq, tags, content, kind, scope, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT DO UPDATE SET tags = excluded.tags, created_at = excluded.created_at`,
+		sessionKey, strings.TrimSpace(senderQQ), strings.TrimSpace(tags), content,
+		MemoryKindPreference, scope, now)
+	if err != nil {
+		return fmt.Errorf("insert preference: %w", err)
+	}
+	return nil
+}
+
+// ListPreferences returns the preferences that must be injected into a prompt:
+// global ones plus the peer-scoped ones of this speaker, newest first.
+func (s *Store) ListPreferences(ctx context.Context, senderQQ string, limit int) ([]Memory, error) {
+	if limit <= 0 {
+		limit = 12
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, session_key, sender_qq, tags, content, kind, scope, created_at
+		   FROM memories
+		  WHERE kind = ? AND (scope = ? OR session_key = ?)
+		  ORDER BY created_at DESC, id DESC LIMIT ?`,
+		MemoryKindPreference, MemoryScopeGlobal, "pref:"+strings.TrimSpace(senderQQ), limit)
+	if err != nil {
+		return nil, fmt.Errorf("list preferences: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Memory
+	for rows.Next() {
+		var m Memory
+		var created int64
+		if err := rows.Scan(&m.ID, &m.SessionKey, &m.SenderQQ, &m.Tags, &m.Content, &m.Kind, &m.Scope, &created); err != nil {
 			return nil, err
 		}
 		m.CreatedAt = time.Unix(created, 0).UTC()

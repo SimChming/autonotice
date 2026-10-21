@@ -38,6 +38,36 @@ func (s *Service) Remember(ctx context.Context, sessionKey, senderQQ, content st
 	}
 }
 
+// RememberPreference stores a system-level preference (only the owner is
+// allowed to create these, the caller enforces that).
+func (s *Service) RememberPreference(ctx context.Context, senderQQ, content string, tags []string, global bool) {
+	if s == nil || s.st == nil {
+		return
+	}
+	scope := store.MemoryScopePeer
+	if global {
+		scope = store.MemoryScopeGlobal
+	}
+	tag := strings.Join(dedupe(tags, 8), ",")
+	if err := s.st.InsertPreference(ctx, senderQQ, tag, content, scope); err != nil {
+		s.log.Warn("store preference", "qq", senderQQ, "err", err)
+	}
+}
+
+// Preferences returns the long-lived preference lines injected into every
+// prompt: global ones plus this speaker's own.
+func (s *Service) Preferences(ctx context.Context, senderQQ string, limit int) []store.Memory {
+	if s == nil || s.st == nil {
+		return nil
+	}
+	out, err := s.st.ListPreferences(ctx, senderQQ, limit)
+	if err != nil {
+		s.log.Warn("list preferences", "qq", senderQQ, "err", err)
+		return nil
+	}
+	return out
+}
+
 // Recall returns the fragments most relevant to the current message, best first.
 func (s *Service) Recall(ctx context.Context, sessionKey, senderQQ, query string, limit int) []store.Memory {
 	if s == nil || s.st == nil || limit <= 0 || sessionKey == "" {

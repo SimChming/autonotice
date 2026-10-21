@@ -47,12 +47,25 @@ type Docs struct {
 	QuotaPerDay int `json:"quota_per_day"`
 }
 
+// Babble controls the low-probability unprompted group messages ("冒泡"):
+// during the configured windows the robot may join the chatter at most
+// MaxPerDay times, each tick only with Probability percent chance.
+type Babble struct {
+	Enabled       bool     `json:"enabled"`
+	Windows       []string `json:"windows"`
+	MaxPerDay     int      `json:"max_per_day"`
+	Probability   int      `json:"probability_pct"`
+	QuietMinutes  int      `json:"quiet_minutes"`
+	RecentMinutes int      `json:"recent_minutes"`
+}
+
 // Settings is the full runtime configuration snapshot.
 type Settings struct {
 	DeepSeek     DeepSeek     `json:"deepseek"`
 	Capabilities Capabilities `json:"capabilities"`
 	AutoSegment  AutoSegment  `json:"auto_segment"`
 	Docs         Docs         `json:"docs"`
+	Babble       Babble       `json:"babble"`
 	// OwnerQQs is derived from the owner_qqs table and never persisted inside
 	// the runtime JSON blob.
 	OwnerQQs []string `json:"-"`
@@ -75,6 +88,19 @@ func DefaultAutoSegment() AutoSegment {
 		MaxDelayMS:  3500,
 		MaxSegments: 3,
 		StartIndex:  2,
+	}
+}
+
+// DefaultBabble enables the low-frequency group bubbling in the usual active
+// hours (early morning, lunch break, evening/night).
+func DefaultBabble() Babble {
+	return Babble{
+		Enabled:       true,
+		Windows:       []string{"06:00-08:00", "11:00-13:00", "16:00-24:00"},
+		MaxPerDay:     3,
+		Probability:   12,
+		QuietMinutes:  45,
+		RecentMinutes: 30,
 	}
 }
 
@@ -107,6 +133,27 @@ func (s *Settings) normalize() {
 	}
 	if s.Docs.QuotaPerDay > 20 {
 		s.Docs.QuotaPerDay = 20
+	}
+	if s.Babble.Windows == nil {
+		s.Babble.Windows = DefaultBabble().Windows
+	}
+	if s.Babble.MaxPerDay <= 0 {
+		s.Babble.MaxPerDay = 3
+	}
+	if s.Babble.MaxPerDay > 10 {
+		s.Babble.MaxPerDay = 10
+	}
+	if s.Babble.Probability < 0 {
+		s.Babble.Probability = 0
+	}
+	if s.Babble.Probability > 100 {
+		s.Babble.Probability = 100
+	}
+	if s.Babble.QuietMinutes <= 0 {
+		s.Babble.QuietMinutes = 45
+	}
+	if s.Babble.RecentMinutes <= 0 {
+		s.Babble.RecentMinutes = 30
 	}
 }
 

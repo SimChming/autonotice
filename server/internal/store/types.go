@@ -38,6 +38,8 @@ type Group struct {
 
 // Message is one normalized inbound chat message.
 type Message struct {
+	// RowID 是 SQLite 的隐式自增行号，仅用于「总结指针」做同秒内的精确游标。
+	RowID        int64     `json:"-"`
 	ID           string    `json:"id"`
 	GroupID      string    `json:"group_id"`
 	MessageID    string    `json:"message_id"`

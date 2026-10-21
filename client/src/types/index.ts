@@ -228,6 +228,15 @@ export interface AutoSegmentSettings {
   start_index: number
 }
 
+export interface BabbleSettings {
+  enabled: boolean
+  windows: string[]
+  max_per_day: number
+  probability: number
+  quiet_minutes: number
+  recent_minutes: number
+}
+
 export interface AdminSettings {
   deepseek: {
     api_key: string
@@ -238,6 +247,7 @@ export interface AdminSettings {
   }
   capabilities: Capabilities
   auto_segment: AutoSegmentSettings
+  babble: BabbleSettings
   docs: { quota_per_day: number }
   control_qq: string
   owners: string[]

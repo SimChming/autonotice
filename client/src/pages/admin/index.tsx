@@ -39,6 +39,12 @@ interface FormState {
   maxDelay: string
   maxSegments: string
   startIndex: string
+  babbleEnabled: boolean
+  babbleWindows: string
+  babbleMax: string
+  babbleProb: string
+  babbleQuiet: string
+  babbleRecent: string
   quota: string
 }
 
@@ -80,6 +86,12 @@ function buildForm(s: AdminSettings): FormState {
     maxDelay: String(s.auto_segment.max_delay_ms),
     maxSegments: String(s.auto_segment.max_segments),
     startIndex: String(s.auto_segment.start_index),
+    babbleEnabled: s.babble?.enabled ?? true,
+    babbleWindows: (s.babble?.windows || ['06:00-08:00', '11:00-13:00', '16:00-24:00']).join(', '),
+    babbleMax: String(s.babble?.max_per_day ?? 3),
+    babbleProb: String(s.babble?.probability ?? 12),
+    babbleQuiet: String(s.babble?.quiet_minutes ?? 45),
+    babbleRecent: String(s.babble?.recent_minutes ?? 30),
     quota: String(s.docs.quota_per_day)
   }
 }
@@ -186,6 +198,17 @@ export default function AdminPage() {
           max_delay_ms: Number(form.maxDelay) || 0,
           max_segments: Number(form.maxSegments) || 3,
           start_index: Number(form.startIndex) || 2
+        },
+        babble: {
+          enabled: form.babbleEnabled,
+          windows: form.babbleWindows
+            .split(',')
+            .map((w) => w.trim())
+            .filter(Boolean),
+          max_per_day: Number(form.babbleMax) || 3,
+          probability: Number(form.babbleProb) || 12,
+          quiet_minutes: Number(form.babbleQuiet) || 45,
+          recent_minutes: Number(form.babbleRecent) || 30
         },
         docs: { quota_per_day: Number(form.quota) || 2 }
       })
@@ -506,6 +529,72 @@ export default function AdminPage() {
           </View>
           <Text className='admin__hint'>
             仅对「主人」或白名单 QQ 的对话生效：主回复发出后，按随机延时自动补发模型给出的第 2..N 段内容。
+          </Text>
+        </View>
+
+        {/* ---------- 群内冒泡 ---------- */}
+        <Text className='section-title'>群内随机冒泡</Text>
+        <View className='admin__card card'>
+          <View className='admin__row'>
+            <Text className='admin__label'>启用冒泡</Text>
+            <Switch
+              checked={form?.babbleEnabled ?? false}
+              color='#0a84ff'
+              onChange={(e) => patchForm({ babbleEnabled: e.detail.value })}
+            />
+          </View>
+          <View className='divider' />
+          <View className='admin__field'>
+            <Text className='admin__label'>活跃时段</Text>
+            <Input
+              className='admin__input'
+              value={form?.babbleWindows ?? ''}
+              placeholder='06:00-08:00, 11:00-13:00, 16:00-24:00'
+              onInput={(e) => patchForm({ babbleWindows: e.detail.value })}
+            />
+          </View>
+          <View className='admin__grid'>
+            <View className='admin__grid-item'>
+              <Text className='admin__label'>每天最多条数</Text>
+              <Input
+                className='admin__input'
+                type='number'
+                value={form?.babbleMax ?? ''}
+                onInput={(e) => patchForm({ babbleMax: e.detail.value })}
+              />
+            </View>
+            <View className='admin__grid-item'>
+              <Text className='admin__label'>每小时概率 (%)</Text>
+              <Input
+                className='admin__input'
+                type='number'
+                value={form?.babbleProb ?? ''}
+                onInput={(e) => patchForm({ babbleProb: e.detail.value })}
+              />
+            </View>
+          </View>
+          <View className='admin__grid'>
+            <View className='admin__grid-item'>
+              <Text className='admin__label'>同群静默 (分钟)</Text>
+              <Input
+                className='admin__input'
+                type='number'
+                value={form?.babbleQuiet ?? ''}
+                onInput={(e) => patchForm({ babbleQuiet: e.detail.value })}
+              />
+            </View>
+            <View className='admin__grid-item'>
+              <Text className='admin__label'>最近消息窗口 (分钟)</Text>
+              <Input
+                className='admin__input'
+                type='number'
+                value={form?.babbleRecent ?? ''}
+                onInput={(e) => patchForm({ babbleRecent: e.detail.value })}
+              />
+            </View>
+          </View>
+          <Text className='admin__hint'>
+            只在上述时段、且群里最近有人在聊天时，以很低概率插一句不带 @ 的闲聊；每天总量受上限约束。
           </Text>
         </View>
 
