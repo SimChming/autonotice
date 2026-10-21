@@ -34,6 +34,7 @@ client/capacitor/ios/Pods/
 server/cmd/app
 server/server
 server/qqsched
+server/qqsched-*
 *.exe
 *.dll
 
@@ -55,3 +56,6 @@ server/uploads/
 
 # Go vendor / IDE
 server/vendor/
+
+# 本地发布产物
+release/
