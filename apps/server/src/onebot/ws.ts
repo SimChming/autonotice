@@ -3,7 +3,7 @@ import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import type { SocketStream } from "@fastify/websocket";
 import type { Config } from "../config.js";
 import type { OneBotClient } from "./client.js";
-import { normalizeMessageEvent } from "./normalize.js";
+import { normalizeMessageEvent, normalizePrivateMessage, type NormalizedPrivateMessage } from "./normalize.js";
 import type { IngestDeps } from "../pipeline/ingest.js";
 import { ingestMessage } from "../pipeline/ingest.js";
 
@@ -13,6 +13,7 @@ interface OneBotWsOptions {
   ingest: IngestDeps;
   botQq: string;
   logger: FastifyBaseLogger;
+  onPrivateMessage?: (message: NormalizedPrivateMessage) => Promise<void> | void;
 }
 
 function safeEqual(value: string | undefined, expected: string): boolean {
@@ -64,6 +65,12 @@ export function registerOneBotWs(app: FastifyInstance, options: OneBotWsOptions)
 
       const message = normalizeMessageEvent(payload, botQq);
       if (!message) {
+        const privateMessage = normalizePrivateMessage(payload, botQq);
+        if (privateMessage && options.onPrivateMessage) {
+          void Promise.resolve(options.onPrivateMessage(privateMessage)).catch((error: unknown) => {
+            logger.warn({ err: error }, "私聊消息处理失败");
+          });
+        }
         return;
       }
       void ingestMessage(ingest, message).catch((error: unknown) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeMessageEvent } from "./normalize.js";
+import { normalizeMessageEvent, normalizePrivateMessage } from "./normalize.js";
 
 const BOT = "3754609823";
 
@@ -47,5 +47,22 @@ describe("normalizeMessageEvent", () => {
     expect(
       normalizeMessageEvent({ ...groupEvent("hi"), message_type: "private" }, BOT),
     ).toBeNull();
+  });
+});
+
+describe("normalizePrivateMessage", () => {
+  it("提取私聊文本并忽略机器人自身", () => {
+    const event = {
+      post_type: "message",
+      message_type: "private",
+      user_id: 3874095145,
+      time: 1_700_000_000,
+      sender: { nickname: "无冕" },
+      message: [{ type: "text", data: { text: " 在吗 " } }],
+    };
+    const result = normalizePrivateMessage(event, BOT);
+    expect(result?.text).toBe("在吗");
+    expect(result?.senderQq).toBe("3874095145");
+    expect(normalizePrivateMessage({ ...event, user_id: 3754609823 }, BOT)).toBeNull();
   });
 });

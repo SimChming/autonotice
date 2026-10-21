@@ -12,6 +12,7 @@ const envSchema = z.object({
   LLM_BASE_URL: z.string().default("https://dashscope.aliyuncs.com/compatible-mode/v1"),
   LLM_API_KEY: z.string().default(""),
   LLM_MODEL: z.string().default("deepseek-v4.1-flash"),
+  LLM_EMBEDDING_MODEL: z.string().default("text-embedding-v4"),
   DATABASE_PATH: z.string().default("./data/app.db"),
   JWT_SECRET: z.string().min(16).default("dev-only-insecure-secret-change-me"),
   ONEBOT_WS_PATH: z.string().startsWith("/").default("/onebot/v11/ws"),
@@ -40,6 +41,7 @@ export interface Config {
     baseUrl: string;
     apiKey: string;
     model: string;
+    embeddingModel: string;
   };
 }
 
@@ -73,6 +75,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       baseUrl: value.LLM_BASE_URL,
       apiKey: value.LLM_API_KEY,
       model: value.LLM_MODEL,
+      embeddingModel: value.LLM_EMBEDDING_MODEL,
     },
   };
 }

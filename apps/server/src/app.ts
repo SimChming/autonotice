@@ -13,7 +13,7 @@ import { registerBindRoutes } from "./routes/bind.js";
 import { registerScheduleRoutes } from "./routes/schedules.js";
 import { OneBotClient } from "./onebot/client.js";
 import { registerOneBotWs } from "./onebot/ws.js";
-import { createAtBotHandler } from "./bot/handle.js";
+import { createBotHandlers } from "./bot/handle.js";
 import type { IngestDeps } from "./pipeline/ingest.js";
 import { createLlmClient } from "./llm/client.js";
 import { extractSchedules } from "./pipeline/extract.js";
@@ -49,11 +49,12 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   const onebot = new OneBotClient();
   const llm = createLlmClient(config);
   const hub = new NotifyHub(app.log);
+  const bot = createBotHandlers({ db, config, llm, hub, onebot, logger: app.log });
 
   const ingest: IngestDeps = {
     db,
     bindGroupId: config.bind.groupId,
-    onAtBot: createAtBotHandler({ botQq: BOT_QQ, client: onebot, logger: app.log }),
+    onAtBot: bot.onGroupAt,
     onBoundUserMessage: (userId, message, msgId) => {
       void (async () => {
         try {
@@ -92,6 +93,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     ingest,
     botQq: BOT_QQ,
     logger: app.log,
+    onPrivateMessage: bot.onPrivateMessage,
   });
 
   app.addHook("onSend", async (_request, reply, payload) => {

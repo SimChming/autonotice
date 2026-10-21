@@ -22,6 +22,50 @@ interface Segment {
 const CQ_AT = /\[CQ:at,qq=(\d+)[^\]]*\]/g;
 const CQ_ANY = /\[CQ:[^\]]+\]/g;
 
+/**
+ * 私聊消息归一化；机器人自己发的、非私聊事件返回 null。
+ */
+export function normalizePrivateMessage(event: unknown, botQq: string): NormalizedPrivateMessage | null {
+  if (!event || typeof event !== "object") {
+    return null;
+  }
+  const payload = event as Record<string, unknown>;
+  if (payload.post_type !== "message" || payload.message_type !== "private") {
+    return null;
+  }
+
+  const senderQq = String(payload.user_id ?? "");
+  if (!senderQq || senderQq === botQq) {
+    return null;
+  }
+
+  const sender = (payload.sender ?? {}) as Record<string, unknown>;
+  const rawMessage = payload.message;
+  const parsed = Array.isArray(rawMessage)
+    ? segmentsFromArray(rawMessage as Segment[])
+    : typeof rawMessage === "string"
+      ? parseCqString(rawMessage)
+      : { text: "" };
+
+  const seconds = Number(payload.time);
+  return {
+    senderQq,
+    senderName: String(sender.nickname ?? ""),
+    text: parsed.text,
+    msgTime: Number.isFinite(seconds) ? seconds * 1000 : Date.now(),
+    raw: event,
+  };
+}
+
+
+export interface NormalizedPrivateMessage {
+  senderQq: string;
+  senderName: string;
+  text: string;
+  msgTime: number;
+  raw: unknown;
+}
+
 function segmentsFromArray(message: Segment[]): { text: string; atTargets: string[] } {
   const atTargets: string[] = [];
   let text = "";
@@ -47,6 +91,14 @@ function parseCqString(message: string): { text: string; atTargets: string[] } {
     }
   }
   return { text: message.replace(CQ_ANY, "").trim(), atTargets };
+}
+
+export interface NormalizedPrivateMessage {
+  senderQq: string;
+  senderName: string;
+  text: string;
+  msgTime: number;
+  raw: unknown;
 }
 
 /**
