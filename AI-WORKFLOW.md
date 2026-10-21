@@ -324,11 +324,11 @@ GET  /api/v1/admin/overview                 → 连接状态/配额/审计
 
 **任务**
 
-- [ ] drizzle schema §5 全表 + 首版迁移跑通
-- [ ] auth 路由（register/login，JWT）；bind 路由（start/confirm，绑定码 10 分钟有效）
-- [ ] `onebot/normalize.ts`：message 双形态兼容（段数组 / CQ 字符串，正则兜底提取 @）
-- [ ] `pipeline/ingest.ts`：NapCat 事件 → 归一化 → `messages` 表入库 + 分发钩子（本阶段只打日志）
-- [ ] `bot/handle.ts` 最小版：群里 @ 机器人时回复固定文案（验证触发链路）
+- [x] drizzle schema §5 全表 + 首版迁移跑通
+- [x] auth 路由（register/login，JWT）；bind 路由（start/confirm，绑定码 10 分钟有效）
+- [x] `onebot/normalize.ts`：message 双形态兼容（段数组 / CQ 字符串，正则兜底提取 @）
+- [x] `pipeline/ingest.ts`：NapCat 事件 → 归一化 → `messages` 表入库 + 分发钩子（本阶段只打日志）
+- [x] `bot/handle.ts` 最小版：群里 @ 机器人时回复固定文案（验证触发链路）
 
 **验收**：curl 完成 注册→登录→start 绑定→QQ 大号在群里发码→confirm 成功；群内 @ 机器人收到固定回复；重启容器后 JWT 与绑定关系仍在。
 
@@ -511,4 +511,7 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-21 Phase 1：NapCat 容器新增 `./napcat/qq:/app/.config/QQ` 挂载以持久化 QQ 登录态，避免重建容器后重复扫码。
 - 2026-10-21 Phase 2：服务器从 ghcr.io 拉取镜像速度约 100 KB/s，部署脚本超时放宽到 1800s、ssh-action `command_timeout: 30m`；首次拉取耗时较长，后续命中本地层会明显加快。
 - 2026-10-21 Phase 2：为在 v2 分支完成验收，deploy.yml 的 push 触发分支暂含 `v2`，Phase 8 合并回 main 后可恢复仅 main。
+- 2026-10-22 Phase 3：服务器侧 ghcr 拉取长期卡住，部署改为 CI runner 先 `docker pull` 再 `docker save | gzip | ssh 'gunzip | docker load'`，deploy.sh 不再在服务器拉镜像。
+- 2026-10-22 Phase 3：NapCat OneBot 反向 WS 配置字段是 `enable`（不是 `enabled`），配置目录已挂载到 `./napcat/config` 固化；NapCat 重建后小号仍需扫码（快速登录偶发失效）。
+- 2026-10-22 Phase 3：auth/bind 实测通过（注册→登录→start→confirm），群内 @ 已收到固定回复，`messages`/`groups` 入库正常。
 
