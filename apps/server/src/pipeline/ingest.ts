@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db/client.js";
-import { groups, messages } from "../db/schema.js";
+import { bindings, groups, messages } from "../db/schema.js";
 import type { NormalizedMessage } from "../onebot/normalize.js";
 import { autoConfirmBind } from "../services/bind.js";
 
@@ -9,6 +9,7 @@ export interface IngestDeps {
   db: Db;
   bindGroupId: string;
   onAtBot: (message: NormalizedMessage) => Promise<void> | void;
+  onBoundUserMessage?: (userId: number, message: NormalizedMessage, msgId: number) => void;
   logger: FastifyBaseLogger;
 }
 
@@ -27,7 +28,7 @@ export async function ingestMessage(deps: IngestDeps, message: NormalizedMessage
     db.update(groups).set({ updatedAt: now }).where(eq(groups.groupId, message.groupId)).run();
   }
 
-  db.insert(messages)
+  const inserted = db.insert(messages)
     .values({
       groupId: message.groupId,
       senderQq: message.senderQq,
@@ -35,7 +36,13 @@ export async function ingestMessage(deps: IngestDeps, message: NormalizedMessage
       rawJson: JSON.stringify(message.raw),
       msgTime: message.msgTime,
     })
-    .run();
+    .returning({ id: messages.id })
+    .get();
+
+  const binding = db.select().from(bindings).where(eq(bindings.qq, message.senderQq)).get();
+  if (binding && deps.onBoundUserMessage && message.text.trim()) {
+    deps.onBoundUserMessage(binding.userId, message, inserted.id);
+  }
 
   if (message.groupId === deps.bindGroupId) {
     const bound = autoConfirmBind(db, message.senderQq, message.text);

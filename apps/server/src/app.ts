@@ -11,6 +11,11 @@ import { OneBotClient } from "./onebot/client.js";
 import { registerOneBotWs } from "./onebot/ws.js";
 import { createAtBotHandler } from "./bot/handle.js";
 import type { IngestDeps } from "./pipeline/ingest.js";
+import { createLlmClient } from "./llm/client.js";
+import { extractSchedules } from "./pipeline/extract.js";
+import { mergeAndSave } from "./pipeline/merge.js";
+import { NotifyHub } from "./notify/hub.js";
+import { startReminderScheduler } from "./scheduler/reminders.js";
 
 /**
  * 装配 Fastify 实例。路由层只做：鉴权 → zod 校验 → 调服务 → 返回（§4.4）。
@@ -38,15 +43,44 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   });
 
   const onebot = new OneBotClient();
+  const llm = createLlmClient(config);
+  const hub = new NotifyHub(app.log);
+
   const ingest: IngestDeps = {
     db,
     bindGroupId: config.bind.groupId,
     onAtBot: createAtBotHandler({ botQq: BOT_QQ, client: onebot, logger: app.log }),
+    onBoundUserMessage: (userId, message, msgId) => {
+      void (async () => {
+        try {
+          const items = await extractSchedules(llm, message.text);
+          if (!items.length) {
+            return;
+          }
+          const created = await mergeAndSave(
+            { db, llm, logger: app.log },
+            userId,
+            message.groupId,
+            msgId,
+            items,
+          );
+          app.log.info({ userId, msgId, created }, "日程抽取完成");
+        } catch (error) {
+          app.log.warn({ err: error, userId, msgId }, "日程抽取失败");
+        }
+      })();
+    },
     logger: app.log,
   };
 
+  const reminderTask = startReminderScheduler({ db, hub, onebot, logger: app.log });
+  app.addHook("onClose", async () => {
+    reminderTask.stop();
+  });
+
   registerAuthRoutes(app, { db, config });
   registerBindRoutes(app, { db, config });
+  hub.registerRoute(app);
   registerOneBotWs(app, {
     config,
     client: onebot,

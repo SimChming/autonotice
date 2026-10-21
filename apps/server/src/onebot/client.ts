@@ -84,4 +84,11 @@ export class OneBotClient {
       message: [{ type: "text", data: { text } }],
     });
   }
+
+  async sendPrivateMsg(userId: string, text: string): Promise<void> {
+    await this.request("send_private_msg", {
+      user_id: Number(userId),
+      message: [{ type: "text", data: { text } }],
+    });
+  }
 }
