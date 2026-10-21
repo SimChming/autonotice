@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Text, View } from '@tarojs/components'
+import { Image, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 
 import { Empty } from '../../components/Empty'
@@ -15,7 +15,35 @@ import { copyText } from '../../utils/storage'
 import { useAuthGuard } from '../../utils/useAuthGuard'
 import './index.scss'
 
-/** 「需人工查看」告警：被屏蔽/无法抓取的群内容 */
+/** 把 CQ 代码 / HTML 残留 清洗干净，兜底（服务端也做了，前端双保险） */
+function cleanCQ(s: string): string {
+  if (!s) return ''
+  return s
+    .replace(/\[CQ:[^\]]*\]/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&#91;/g, '[')
+    .replace(/&#93;/g, ']')
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** 根据 alert 的来源字段决定显示成 "群聊" 还是 "私聊" */
+function sourceLabel(a: { message_type?: string; source_name?: string; group_id?: string }) {
+  const isPrivate = a.message_type === 'private' || (!a.message_type && !a.group_id)
+  const icon = isPrivate ? 'message-circle' : 'users'
+  const label = isPrivate ? '私聊' : '群聊'
+  const detail = a.source_name || (isPrivate ? '' : a.group_id ? `群 ${a.group_id}` : '')
+  return { icon, label, detail, isPrivate }
+}
+
+/** 头像占位：没头像 URL 时用字母代替 */
+function avatarInitial(name?: string): string {
+  if (!name) return '?'
+  const ch = name.trim().charAt(0)
+  return ch || '?'
+}
+
 export default function AlertsPage() {
   useAuthGuard()
 
@@ -81,36 +109,59 @@ export default function AlertsPage() {
         {alerts.length ? (
           alerts.map((a) => {
             const isUnread = !a.read_at
+            const src = sourceLabel(a)
             return (
               <View key={a.id} className={`alert-card card${isUnread ? ' is-unread' : ''}`}>
+                {/* 来源行：头像 + "群聊/私聊" + 名称 */}
+                <View className='alert-card__source'>
+                  {a.source_avatar ? (
+                    <Image
+                      className='alert-card__avatar'
+                      src={a.source_avatar}
+                      mode='aspectFill'
+                    />
+                  ) : (
+                    <View className={`alert-card__avatar alert-card__avatar-placeholder${src.isPrivate ? ' is-private' : ''}`}>
+                      <Text className='alert-card__avatar-text'>{avatarInitial(src.detail)}</Text>
+                    </View>
+                  )}
+                  <View className='alert-card__source-info'>
+                    <View className='alert-card__source-label'>
+                      <Icon name={src.icon as any} className='alert-card__source-icon' strokeWidth={2} />
+                      <Text className='alert-card__source-type'>{src.label}</Text>
+                    </View>
+                    {src.detail ? <Text className='alert-card__source-name'>{src.detail}</Text> : null}
+                  </View>
+                  <Text className='alert-card__time'>{fmtRelative(a.created_at)}</Text>
+                  {isUnread ? <View className='alert-card__dot' /> : null}
+                </View>
+
+                {/* 优先级 + 标题 */}
                 <View className='alert-card__head'>
                   <View className={`alert-card__level${a.level === 'high' ? ' is-high' : ''}`}>
                     <Text className='alert-card__level-text'>
                       {a.level === 'high' ? '高优先' : '提示'}
                     </Text>
                   </View>
-                  <Text className='alert-card__time'>{fmtRelative(a.created_at)}</Text>
-                  {isUnread ? <View className='alert-card__dot' /> : null}
                 </View>
 
-                <Text className='alert-card__title'>{a.title}</Text>
-                <Text className='alert-card__summary'>{a.summary}</Text>
+                <Text className='alert-card__title'>{cleanCQ(a.title)}</Text>
+                <Text className='alert-card__summary'>{cleanCQ(a.summary)}</Text>
 
                 {a.context_excerpt ? (
                   <View className='alert-card__excerpt'>
-                    <Text className='alert-card__excerpt-text'>{a.context_excerpt}</Text>
+                    <Text className='alert-card__excerpt-text'>{cleanCQ(a.context_excerpt)}</Text>
                   </View>
                 ) : null}
 
                 {a.review_reason ? (
                   <View className='alert-card__reason'>
                     <Icon name='alert' className='alert-card__reason-icon' strokeWidth={1.8} />
-                    <Text className='alert-card__reason-text'>{a.review_reason}</Text>
+                    <Text className='alert-card__reason-text'>{cleanCQ(a.review_reason)}</Text>
                   </View>
                 ) : null}
 
                 <View className='alert-card__footer'>
-                  <Text className='alert-card__group'>群 {a.group_id}</Text>
                   <View className='alert-card__buttons'>
                     <View
                       className='alert-card__btn pressable'

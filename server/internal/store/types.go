@@ -109,6 +109,8 @@ type ContentAsset struct {
 	GroupID       string     `json:"group_id"`
 	MessageID     string     `json:"message_id"`
 	SenderQQ      string     `json:"sender_qq"`
+	// MessageType: "group" | "private" — 告警来源区分用。
+	MessageType   string     `json:"message_type"`
 	Kind          string     `json:"kind"`
 	Title         string     `json:"title"`
 	DeclaredURL   string     `json:"declared_url"`
@@ -144,6 +146,26 @@ type Alert struct {
 	Delivered      bool       `json:"delivered"`
 	ReadAt         *time.Time `json:"read_at"`
 	CreatedAt      time.Time  `json:"created_at"`
+	// MessageType: "group" | "private" — 区分消息来源于群聊还是私聊，
+	// 避免客户端把私聊告警错误展示成 "群 xxx"。
+	MessageType string `json:"message_type"`
+	// SourceName: 群名或对方昵称（已清洗）。
+	SourceName string `json:"source_name"`
+	// SourceAvatar: 头像 URL（QQ 公开头像）。
+	SourceAvatar string `json:"source_avatar"`
+}
+
+// Feedback is a user-submitted "Contact Us" entry shown in the admin back office.
+type Feedback struct {
+	ID        string    `json:"id"`
+	UserQQ    string    `json:"user_qq"`
+	UserID    string    `json:"user_id"`
+	Subject   string    `json:"subject"`
+	Body      string    `json:"body"`
+	Contact   string    `json:"contact"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // UserState tracks the per-user schedule document revision and digest.

@@ -175,7 +175,7 @@ func (s *Service) handleMessage(ctx context.Context, ev onebot.Event) error {
 		s.ensureGroupName(ctx, ev.GroupID)
 	}
 
-	assets := ExtractAssets(ev, msg.ID, msg.GroupID, msg.SenderQQ, now)
+	assets := ExtractAssets(ev, msg.ID, msg.GroupID, msg.SenderQQ, messageType(ev), now)
 	for i := range assets {
 		saved, isNew, err := s.store.InsertAsset(ctx, assets[i])
 		if err != nil {

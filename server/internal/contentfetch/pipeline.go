@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -407,6 +408,38 @@ func (q *Queue) raiseAlerts(ctx context.Context, a store.ContentAsset, title, su
 		excerpt = truncateRunes(ctxLines[len(ctxLines)-1], 200)
 	}
 
+	// 清洗所有展示文本里的 CQ 代码，避免前端出现乱码
+	title = cleanCQ(title)
+	summary = cleanCQ(summary)
+	excerpt = cleanCQ(excerpt)
+	reason = cleanCQ(reason)
+
+	// 填充来源元信息：区分私聊 / 群聊，并给出可展示的名称 + 头像
+	msgType := a.MessageType
+	if msgType == "" {
+		if a.GroupID != "" {
+			msgType = "group"
+		} else {
+			msgType = "private"
+		}
+	}
+	var (
+		srcName  string
+		srcAvatar string
+	)
+	if msgType == "group" {
+		srcName = q.store.GetGroupName(ctx, a.GroupID)
+		if srcName == "" {
+			srcName = "群 " + a.GroupID
+		}
+	} else {
+		srcName = a.SenderQQ
+	}
+	if a.SenderQQ != "" {
+		// QQ 公开头像接口（无需鉴权）
+		srcAvatar = "https://q1.qlogo.cn/g?b=qq&nk=" + a.SenderQQ + "&s=100"
+	}
+
 	targets := map[string]struct{}{}
 	for _, b := range bindings {
 		if a.GroupID != "" && b.GroupID != "" && b.GroupID != a.GroupID {
@@ -432,6 +465,9 @@ func (q *Queue) raiseAlerts(ctx context.Context, a store.ContentAsset, title, su
 			Summary:        summary,
 			ContextExcerpt: excerpt,
 			ReviewReason:   reason,
+			MessageType:    msgType,
+			SourceName:     srcName,
+			SourceAvatar:   srcAvatar,
 		}
 		saved, inserted, err := q.store.InsertAlert(ctx, al)
 		if err != nil {
@@ -442,6 +478,25 @@ func (q *Queue) raiseAlerts(ctx context.Context, a store.ContentAsset, title, su
 			sink(*saved)
 		}
 	}
+}
+
+// cleanCQ removes [CQ:...] segments and HTML-encoded entities from user-facing
+// strings so alert cards don't show garbled codes like `&amp;`.
+func cleanCQ(s string) string {
+	if s == "" {
+		return ""
+	}
+	// CQ 代码: [CQ:image,...], [CQ:at,...], ...
+	cqRe := regexp.MustCompile(`\[CQ:[^\]]*\]`)
+	s = cqRe.ReplaceAllString(s, "")
+	// HTML 转义还原（CQ code 里经常 &amp; 把等号和 & 编码了）
+	s = strings.ReplaceAll(s, "&amp;", "&")
+	s = strings.ReplaceAll(s, "&#91;", "[")
+	s = strings.ReplaceAll(s, "&#93;", "]")
+	s = strings.ReplaceAll(s, "&quot;", "\"")
+	// 清理多余空白
+	s = strings.Join(strings.Fields(s), " ")
+	return s
 }
 
 func (q *Queue) contextLines(ctx context.Context, a store.ContentAsset) []string {

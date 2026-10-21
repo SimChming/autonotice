@@ -17,7 +17,7 @@ var linkPattern = regexp.MustCompile(`https?://[^\s<>"'）】\]]+`)
 // ExtractAssets walks the message segments of an event and produces content
 // assets (files, links, miniapp cards and inline URLs). Deduplication happens
 // later via the asset fingerprint.
-func ExtractAssets(ev onebot.Event, messageRowID, groupID, senderQQ string, now time.Time) []store.ContentAsset {
+func ExtractAssets(ev onebot.Event, messageRowID, groupID, senderQQ, msgType string, now time.Time) []store.ContentAsset {
 	var out []store.ContentAsset
 	seen := map[string]bool{}
 
@@ -26,6 +26,7 @@ func ExtractAssets(ev onebot.Event, messageRowID, groupID, senderQQ string, now 
 		a.GroupID = groupID
 		a.MessageID = messageRowID
 		a.SenderQQ = senderQQ
+		a.MessageType = msgType
 		a.CreatedAt = now
 		a.FetchStatus = store.FetchPending
 		if a.Fingerprint == "" {

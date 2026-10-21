@@ -310,6 +310,13 @@ export const api = {
   readAlert: (id: string) =>
     request<void>(`/alerts/me/${encodeURIComponent(id)}/read`, { method: 'POST' }),
 
+  /** 提交一条「联系我们」反馈 */
+  postFeedback: (body: { subject?: string; body: string; contact?: string }) =>
+    request<{ id: string }>('/feedback', {
+      method: 'POST',
+      data: body
+    }),
+
   // -------------------------------------------------------------------------
   // 一键实时排程（SSE 流式思考链）
   // -------------------------------------------------------------------------

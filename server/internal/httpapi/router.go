@@ -125,6 +125,9 @@ func NewRouter(d Deps) http.Handler {
 	mux.Handle("GET "+base+"/alerts/me", a.secure(http.HandlerFunc(a.listAlerts)))
 	mux.Handle("POST "+base+"/alerts/me/{id}/read", a.secure(http.HandlerFunc(a.readAlert)))
 
+	// Feedback / Contact Us (authenticated, simple freeform submission).
+	mux.Handle("POST "+base+"/feedback", a.secure(http.HandlerFunc(a.createFeedback)))
+
 	// Realtime push (authenticated via query token).
 	mux.Handle("GET "+base+"/ws", a.secure(http.HandlerFunc(a.pushWS)))
 

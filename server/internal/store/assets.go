@@ -23,6 +23,19 @@ func (s *Store) UpsertGroup(ctx context.Context, groupID, name string) error {
 	return err
 }
 
+// GetGroupName returns the friendly group name, or "" if unknown.
+func (s *Store) GetGroupName(ctx context.Context, groupID string) string {
+	if groupID == "" {
+		return ""
+	}
+	var name string
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT group_name FROM groups WHERE group_id = ?`, groupID).Scan(&name); err != nil {
+		return ""
+	}
+	return name
+}
+
 // ListGroups returns every configured group.
 func (s *Store) ListGroups(ctx context.Context) ([]Group, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -237,7 +250,10 @@ func scanAsset(row rowScanner) (*ContentAsset, error) {
 // --- alerts ---
 
 const alertCols = `id, user_qq, group_id, content_asset_id, level, title, summary,
-	context_excerpt, review_reason, delivered, read_at, created_at`
+	context_excerpt, review_reason, delivered, read_at, created_at,
+	COALESCE(message_type, 'group') AS message_type,
+	COALESCE(source_name, '') AS source_name,
+	COALESCE(source_avatar, '') AS source_avatar`
 
 // InsertAlert stores an alert idempotently on (content_asset_id, user_qq).
 func (s *Store) InsertAlert(ctx context.Context, al Alert) (*Alert, bool, error) {
@@ -251,11 +267,14 @@ func (s *Store) InsertAlert(ctx context.Context, al Alert) (*Alert, bool, error)
 		al.CreatedAt = time.Now().UTC()
 	}
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO alerts (`+alertCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO alerts (id, user_qq, group_id, content_asset_id, level, title, summary,
+		 context_excerpt, review_reason, delivered, read_at, created_at,
+		 message_type, source_name, source_avatar)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(content_asset_id, user_qq) DO NOTHING`,
 		al.ID, al.UserQQ, al.GroupID, al.ContentAssetID, al.Level, al.Title, al.Summary,
-		al.ContextExcerpt, al.ReviewReason, boolInt(al.Delivered), unixPtr(al.ReadAt), al.CreatedAt.Unix())
+		al.ContextExcerpt, al.ReviewReason, boolInt(al.Delivered), unixPtr(al.ReadAt), al.CreatedAt.Unix(),
+		al.MessageType, al.SourceName, al.SourceAvatar)
 	if err != nil {
 		return nil, false, err
 	}
@@ -349,9 +368,12 @@ func scanAlert(row rowScanner) (*Alert, error) {
 		delivered int
 		readAt    sql.NullInt64
 		createdAt sql.NullInt64
+		msgType   sql.NullString
+		srcName   sql.NullString
+		srcAvatar sql.NullString
 	)
 	if err := row.Scan(&a.ID, &a.UserQQ, &a.GroupID, &a.ContentAssetID, &a.Level, &a.Title, &a.Summary,
-		&ctxEx, &review, &delivered, &readAt, &createdAt); err != nil {
+		&ctxEx, &review, &delivered, &readAt, &createdAt, &msgType, &srcName, &srcAvatar); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -362,9 +384,16 @@ func scanAlert(row rowScanner) (*Alert, error) {
 	a.Delivered = delivered != 0
 	a.ReadAt = timePtr(readAt)
 	a.CreatedAt = timeVal(createdAt)
+	a.MessageType = msgType.String
+	a.SourceName = srcName.String
+	a.SourceAvatar = srcAvatar.String
+	if a.MessageType == "" {
+		a.MessageType = "group"
+	}
 	return &a, nil
 }
 
+// itoa
 func itoa(n int) string {
 	if n == 0 {
 		return "0"
@@ -373,16 +402,91 @@ func itoa(n int) string {
 	if neg {
 		n = -n
 	}
-	var b [20]byte
-	i := len(b)
+	var digits [20]byte
+	i := len(digits)
 	for n > 0 {
 		i--
-		b[i] = byte('0' + n%10)
+		digits[i] = byte('0' + n%10)
 		n /= 10
 	}
 	if neg {
 		i--
-		b[i] = '-'
+		digits[i] = '-'
 	}
-	return string(b[i:])
+	return string(digits[i:])
+}
+
+// --- feedback ---
+
+// InsertFeedback saves a user-submitted "Contact Us" entry.
+func (s *Store) InsertFeedback(ctx context.Context, f Feedback) (*Feedback, error) {
+	if f.ID == "" {
+		f.ID = uuid.NewString()
+	}
+	now := time.Now().UTC()
+	if f.CreatedAt.IsZero() {
+		f.CreatedAt = now
+	}
+	if f.UpdatedAt.IsZero() {
+		f.UpdatedAt = now
+	}
+	if f.Status == "" {
+		f.Status = "new"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO feedback (id, user_qq, user_id, subject, body, contact, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		f.ID, f.UserQQ, f.UserID, f.Subject, f.Body, f.Contact, f.Status,
+		f.CreatedAt.Unix(), f.UpdatedAt.Unix())
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+// ListFeedback returns feedback entries newest first (for the admin panel).
+func (s *Store) ListFeedback(ctx context.Context, limit int) ([]Feedback, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, user_qq, COALESCE(user_id,''), COALESCE(subject,''), body, COALESCE(contact,''),
+		        status, created_at, updated_at
+		 FROM feedback ORDER BY created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Feedback
+	for rows.Next() {
+		var (
+			f         Feedback
+			qq        sql.NullString
+			uid       sql.NullString
+			subject   sql.NullString
+			contact   sql.NullString
+			createdAt sql.NullInt64
+			updated   sql.NullInt64
+		)
+		if err := rows.Scan(&f.ID, &qq, &uid, &subject, &f.Body, &contact, &f.Status, &createdAt, &updated); err != nil {
+			return nil, err
+		}
+		f.UserQQ = qq.String
+		f.UserID = uid.String
+		f.Subject = subject.String
+		f.Contact = contact.String
+		f.CreatedAt = time.Unix(createdAt.Int64, 0).UTC()
+		f.UpdatedAt = time.Unix(updated.Int64, 0).UTC()
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// UpdateFeedbackStatus flips the admin-facing status (new → replied → closed).
+func (s *Store) UpdateFeedbackStatus(ctx context.Context, id, status string) error {
+	now := time.Now().UTC()
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE feedback SET status = ?, updated_at = ? WHERE id = ?`,
+		status, now.Unix(), id)
+	return err
 }

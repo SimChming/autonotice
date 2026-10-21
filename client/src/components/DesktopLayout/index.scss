@@ -139,6 +139,97 @@
   color: var(--text-tertiary);
 }
 
+.dlayout__foot-user {
+  border-radius: 8PX;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.dlayout__foot-user:hover {
+  background: var(--bg-sunken);
+}
+
+.dlayout__foot-user.is-open {
+  background: var(--accent-soft);
+}
+
+.dlayout__foot-caret {
+  width: 14PX;
+  height: 14PX;
+  color: var(--text-tertiary);
+  margin-left: auto;
+  transition: transform 0.18s;
+  transform: rotate(90deg);  /* → 旋转成 ↓ */
+}
+
+.dlayout__foot-caret.is-open {
+  transform: rotate(-90deg);  /* → 旋转成 ↑ */
+}
+
+/* 用户菜单 */
+.dlayout__user-menu {
+  position: absolute;
+  left: 12PX;
+  right: 12PX;
+  bottom: calc(100% + 6PX);
+  background: var(--bg-elevated);
+  border: 1PX solid var(--separator);
+  border-radius: 10PX;
+  box-shadow: 0 8PX 24PX rgba(0, 0, 0, 0.18);
+  z-index: 50;
+  overflow: hidden;
+  animation: menu-pop 0.12s ease-out;
+}
+
+@keyframes menu-pop {
+  from { opacity: 0; transform: translateY(6PX); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dlayout__menu-row {
+  display: flex;
+  align-items: center;
+  gap: 10PX;
+  padding: 9PX 12PX;
+  transition: background 0.12s;
+}
+
+.dlayout__menu-row:hover {
+  background: var(--bg-sunken);
+}
+
+.dlayout__menu-icon {
+  width: 17PX;
+  height: 17PX;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.dlayout__menu-label {
+  font-size: 13PX;
+  color: var(--text);
+  flex: 1;
+}
+
+.dlayout__menu-label.is-danger {
+  color: var(--danger);
+}
+
+.dlayout__menu-hint {
+  font-size: 11PX;
+  color: var(--text-tertiary);
+  max-width: 100PX;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dlayout__user-menu-sep {
+  height: 1PX;
+  background: var(--separator);
+  margin: 2PX 8PX;
+}
+
 .dlayout__main {
   flex: 1;
   min-width: 0;

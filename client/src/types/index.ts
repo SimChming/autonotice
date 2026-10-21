@@ -68,6 +68,12 @@ export interface Alert {
   review_reason: string
   read_at: string | null
   created_at: string
+  /** "group" | "private" — 区分群聊告警还是私聊告警 */
+  message_type?: string
+  /** 群名或对方昵称 */
+  source_name?: string
+  /** 头像 URL（QQ 公开头像） */
+  source_avatar?: string
 }
 
 export interface Binding {
