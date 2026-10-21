@@ -13,6 +13,7 @@ import { useAuthStore } from '../../store/auth'
 import { useNotifyStore } from '../../store/notify'
 import { useScheduleStore } from '../../store/schedule'
 import { detectDeviceKind } from '../../utils/platform'
+import { useDesktopUI } from '../../utils/desktop'
 import { useAuthGuard } from '../../utils/useAuthGuard'
 import './index.scss'
 
@@ -36,6 +37,7 @@ export default function SettingsPage() {
 
   const user = useAuthStore((s) => s.user)
   const bindings = useAuthStore((s) => s.bindings)
+  const isOwner = useAuthStore((s) => s.privileges.isOwner)
   const permission = useNotifyStore((s) => s.permission)
   const settings = useNotifyStore((s) => s.settings)
   const runtime = useNotifyStore((s) => s.runtime)
@@ -51,6 +53,8 @@ export default function SettingsPage() {
   const [working, setWorking] = useState(false)
 
   const deviceKind = detectDeviceKind()
+  // 桌面端把「账号与同步」收进左下角用户菜单，这里只为手机/平板保留
+  const desktop = useDesktopUI()
   const isAndroid = deviceKind === 'android'
   const status = syncStatus()
 
@@ -320,50 +324,60 @@ export default function SettingsPage() {
           </View>
         </View>
 
-        {/* ---------------- 账号与同步 ---------------- */}
-        <Text className='section-title'>账号与同步</Text>
-        <View className='settings__card card'>
-          <View
-            className='settings__row pressable'
-            onClick={() => Taro.navigateTo({ url: '/pages/admin/index' }).catch(() => undefined)}
-          >
-            <Text className='settings__label'>管理后台</Text>
-            <Text className='settings__value'>主人专属 · 模型 / 能力 / 名单</Text>
-          </View>
-          <View className='divider' />
-          <View className='settings__row pressable' onClick={() => Taro.navigateTo({ url: '/pages/bind/index' })}>
-            <Text className='settings__label'>QQ 绑定</Text>
-            <Text className='settings__value'>
-              {bindings.length ? `${bindings.filter((b) => b.verified).length} / ${bindings.length} 已验证` : '未绑定'}
-            </Text>
-          </View>
-          <View className='divider' />
-          <View className='settings__row'>
-            <Text className='settings__label'>服务端</Text>
-            <Text className='settings__value'>{api.base}</Text>
-          </View>
-          <View className='divider' />
-          <View className='settings__row'>
-            <Text className='settings__label'>日程版本</Text>
-            <Text className='settings__value'>revision {revision}</Text>
-          </View>
-          <View className='divider' />
-          <View className='settings__row'>
-            <Text className='settings__label'>待同步改动 / 冲突</Text>
-            <Text className={`settings__value${status.pending || conflicts ? ' is-warn' : ''}`}>
-              {status.pending} / {conflicts}
-            </Text>
-          </View>
+        {/* ---------------- 账号与同步（桌面端已移到左下角用户菜单） ---------------- */}
+        {!desktop ? (
+          <>
+            <Text className='section-title'>账号与同步</Text>
+            <View className='settings__card card'>
+              {isOwner ? (
+                <>
+                  <View
+                    className='settings__row pressable'
+                    onClick={() => Taro.navigateTo({ url: '/pages/admin/index' }).catch(() => undefined)}
+                  >
+                    <Text className='settings__label'>管理后台</Text>
+                    <Text className='settings__value'>主人专属 · 模型 / 能力 / 名单</Text>
+                  </View>
+                  <View className='divider' />
+                </>
+              ) : null}
+              <View className='settings__row pressable' onClick={() => Taro.navigateTo({ url: '/pages/bind/index' })}>
+                <Text className='settings__label'>QQ 绑定</Text>
+                <Text className='settings__value'>
+                  {bindings.length
+                    ? `${bindings.filter((b) => b.verified).length} / ${bindings.length} 已验证`
+                    : '未绑定'}
+                </Text>
+              </View>
+              <View className='divider' />
+              <View className='settings__row'>
+                <Text className='settings__label'>服务端</Text>
+                <Text className='settings__value'>{api.base}</Text>
+              </View>
+              <View className='divider' />
+              <View className='settings__row'>
+                <Text className='settings__label'>日程版本</Text>
+                <Text className='settings__value'>revision {revision}</Text>
+              </View>
+              <View className='divider' />
+              <View className='settings__row'>
+                <Text className='settings__label'>待同步改动 / 冲突</Text>
+                <Text className={`settings__value${status.pending || conflicts ? ' is-warn' : ''}`}>
+                  {status.pending} / {conflicts}
+                </Text>
+              </View>
 
-          <View className='settings__actions'>
-            <View className='settings__btn is-primary pressable' onClick={() => void doSync()}>
-              <Text className='settings__btn-text is-primary'>立即同步</Text>
+              <View className='settings__actions'>
+                <View className='settings__btn is-primary pressable' onClick={() => void doSync()}>
+                  <Text className='settings__btn-text is-primary'>立即同步</Text>
+                </View>
+                <View className='settings__btn pressable' onClick={() => void logout()}>
+                  <Text className='settings__btn-text is-danger'>退出登录</Text>
+                </View>
+              </View>
             </View>
-            <View className='settings__btn pressable' onClick={() => void logout()}>
-              <Text className='settings__btn-text is-danger'>退出登录</Text>
-            </View>
-          </View>
-        </View>
+          </>
+        ) : null}
 
         <Text className='settings__about'>
           QQ 群 AI 日程助手 · 客户端 H5 核心（Taro + React），壳打包 iOS / Android / Windows。

@@ -20,6 +20,78 @@ func (a *api) adminSecure(h http.Handler) http.Handler {
 	return a.Auth.MiddlewareScope(auth.ScopeAdmin, h)
 }
 
+// --- owner access ---
+
+// myPrivileges tells the client whether the signed-in account belongs to the
+// server owner (a verified QQ binding to the control QQ or an extra owner QQ).
+func (a *api) myPrivileges(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"is_owner":   a.currentUserIsOwner(r.Context()),
+		"control_qq": a.ControlQQ,
+	})
+}
+
+// adminOwnerSSO issues an admin-scoped token for the master without asking for
+// the back-office password again: ownership is proven by a verified QQ binding.
+func (a *api) adminOwnerSSO(w http.ResponseWriter, r *http.Request) {
+	if a.Admin == nil {
+		writeError(w, http.StatusServiceUnavailable, "admin_disabled", "后台未初始化")
+		return
+	}
+	if !a.currentUserIsOwner(r.Context()) {
+		writeError(w, http.StatusForbidden, "not_owner", "仅主人可进入后台")
+		return
+	}
+	token, expires, acc, err := a.Admin.OwnerToken(r.Context())
+	if err != nil {
+		a.log.Error("admin owner sso", "err", err)
+		writeError(w, http.StatusInternalServerError, "login_error", "登录失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token":      token,
+		"expires_at": expires.Format(time.RFC3339),
+		"admin":      toAdminBody(acc),
+	})
+}
+
+// currentUserIsOwner checks the JWT subject's verified bindings against the
+// control QQ and the extra owner list.
+func (a *api) currentUserIsOwner(ctx context.Context) bool {
+	userID := auth.UserIDFromContext(ctx)
+	if userID == "" || a.Store == nil {
+		return false
+	}
+	bindings, err := a.Store.ListBindingsByUser(ctx, userID)
+	if err != nil {
+		return false
+	}
+	for _, b := range bindings {
+		if b.Verified && a.isOwnerQQ(b.QQUID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *api) isOwnerQQ(qq string) bool {
+	qq = strings.TrimSpace(qq)
+	if qq == "" {
+		return false
+	}
+	if qq == a.ControlQQ {
+		return true
+	}
+	if a.Settings != nil {
+		for _, o := range a.Settings.Snapshot().OwnerQQs {
+			if o == qq {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // --- login / identity ---
 
 type adminLoginRequest struct {
@@ -161,13 +233,13 @@ func (a *api) adminSettingsView(snap *settings.Settings) map[string]any {
 			"model":           snap.DeepSeek.Model,
 			"enable_thinking": snap.DeepSeek.EnableThinking,
 		},
-		"capabilities":  snap.Capabilities,
-		"auto_segment":  snap.AutoSegment,
-		"docs":          snap.Docs,
-		"control_qq":    a.ControlQQ,
-		"owners":        snap.OwnerQQs,
+		"capabilities":   snap.Capabilities,
+		"auto_segment":   snap.AutoSegment,
+		"docs":           snap.Docs,
+		"control_qq":     a.ControlQQ,
+		"owners":         snap.OwnerQQs,
 		"pdf_font_ready": pdfReady,
-		"docs_enabled":  docsEnabled,
+		"docs_enabled":   docsEnabled,
 	}
 }
 

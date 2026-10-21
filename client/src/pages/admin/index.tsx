@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Input, Switch, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 
 import { PageHeader } from '../../components/PageHeader'
 import { errorMessage } from '../../services/api'
 import { useAdminStore } from '../../store/admin'
+import { useAuthStore } from '../../store/auth'
 import type { AdminDocFile, AdminSettings, Capabilities, CapabilityKey } from '../../types'
 import './index.scss'
 
@@ -97,6 +98,19 @@ export default function AdminPage() {
   const [username, setUsername] = useState('admin')
   const [password, setPassword] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
+  const isOwner = useAuthStore((s) => s.privileges.isOwner)
+  const ssoTried = useRef(false)
+
+  // 主人账号已绑定主人 QQ：直接免密换取后台 token，不再要求输入密码
+  useEffect(() => {
+    if (token || ssoTried.current) return
+    if (!isOwner) {
+      void useAuthStore.getState().loadPrivileges()
+      return
+    }
+    ssoTried.current = true
+    useAdminStore.getState().loginWithOwner().catch(() => undefined)
+  }, [token, isOwner])
 
   const [form, setForm] = useState<FormState | null>(null)
   const [saving, setSaving] = useState(false)
@@ -267,7 +281,9 @@ export default function AdminPage() {
               />
             </View>
             <Text className='admin__hint'>
-              后台使用独立管理员账号，与普通用户账号完全隔离。首次部署时由服务端环境变量 ADMIN_PASSWORD 初始化。
+              {isOwner
+                ? '检测到当前账号已绑定主人 QQ，正在自动登录后台…若没有跳转，请手动输入管理员密码。'
+                : '后台使用独立管理员账号，与普通用户账号完全隔离。首次部署时由服务端环境变量 ADMIN_PASSWORD 初始化。'}
             </Text>
             <View className='admin__actions'>
               <View

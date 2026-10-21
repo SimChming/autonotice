@@ -79,6 +79,25 @@ func (s *Service) Login(ctx context.Context, username, password string) (string,
 	return token, expires, acc, nil
 }
 
+// OwnerToken issues an admin-scoped JWT for the bootstrap administrator without
+// a password. Callers must already have verified that the requester is the
+// server owner (a verified QQ binding to the control QQ).
+func (s *Service) OwnerToken(ctx context.Context) (string, time.Time, *store.Admin, error) {
+	acc, err := s.st.GetAdminByUsername(ctx, "admin")
+	if err != nil {
+		return "", time.Time{}, nil, err
+	}
+	token, expires, err := s.jwt.SignScoped(acc.ID, acc.Username, auth.ScopeAdmin)
+	if err != nil {
+		return "", time.Time{}, nil, err
+	}
+	now := time.Now().UTC()
+	if err := s.st.TouchAdminLogin(ctx, acc.ID, now); err == nil {
+		acc.LastLoginAt = &now
+	}
+	return token, expires, acc, nil
+}
+
 // Get loads an administrator by id (used by /admin/me).
 func (s *Service) Get(ctx context.Context, id string) (*store.Admin, error) {
 	return s.st.GetAdminByID(ctx, id)

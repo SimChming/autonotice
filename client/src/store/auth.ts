@@ -3,20 +3,30 @@ import { create } from 'zustand'
 import type { Binding, User } from '../types'
 import { KEYS, getJSON, getRaw, removeRaw, setJSON, setRaw } from '../utils/storage'
 
+export interface Privileges {
+  isOwner: boolean
+  controlQQ: string
+}
+
 interface AuthState {
   token: string | null
   user: User | null
   bindings: Binding[]
+  privileges: Privileges
   hydrate: () => void
   setAuth: (token: string, user: User) => void
   setBindings: (bindings: Binding[]) => void
+  loadPrivileges: () => Promise<void>
   logout: () => void
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+const NO_PRIVILEGES: Privileges = { isOwner: false, controlQQ: '' }
+
+export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   user: null,
   bindings: [],
+  privileges: NO_PRIVILEGES,
 
   hydrate: () => {
     set({
@@ -37,11 +47,27 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ bindings })
   },
 
+  /** 服务端判定当前账号是否为主人（绑定主人 QQ），决定是否显示后台入口 */
+  loadPrivileges: async () => {
+    if (!get().token) {
+      set({ privileges: NO_PRIVILEGES })
+      return
+    }
+    try {
+      // 惰性 import，避免与 services/api 形成循环依赖
+      const { api } = await import('../services/api')
+      const res = await api.myPrivileges()
+      set({ privileges: { isOwner: Boolean(res.is_owner), controlQQ: res.control_qq || '' } })
+    } catch {
+      /* 网络异常时保持未授权，入口隐藏即可 */
+    }
+  },
+
   logout: () => {
     removeRaw(KEYS.token)
     removeRaw(KEYS.user)
     removeRaw(KEYS.bindings)
-    set({ token: null, user: null, bindings: [] })
+    set({ token: null, user: null, bindings: [], privileges: NO_PRIVILEGES })
   }
 }))
 

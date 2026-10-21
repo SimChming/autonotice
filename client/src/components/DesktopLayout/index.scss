@@ -166,17 +166,24 @@
   transform: rotate(-90deg);  /* → 旋转成 ↑ */
 }
 
-/* 用户菜单 */
+/* 用户菜单：挂到 body 的 fixed 面板，避开侧栏裁剪与层叠上下文 */
+.dlayout__menu-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+
+.dlayout__menu-mask {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+}
+
 .dlayout__user-menu {
-  position: absolute;
-  left: 12PX;
-  right: 12PX;
-  bottom: calc(100% + 6PX);
-  background: var(--bg-elevated);
-  border: 1PX solid var(--separator);
+  background: var(--bg-elevated, #fff);
+  border: 1PX solid var(--separator, rgba(0, 0, 0, 0.12));
   border-radius: 10PX;
   box-shadow: 0 8PX 24PX rgba(0, 0, 0, 0.18);
-  z-index: 50;
   overflow: hidden;
   animation: menu-pop 0.12s ease-out;
 }
@@ -184,6 +191,30 @@
 @keyframes menu-pop {
   from { opacity: 0; transform: translateY(6PX); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+.dlayout__menu-head {
+  padding: 10PX 12PX 9PX;
+  display: flex;
+  flex-direction: column;
+  gap: 2PX;
+}
+
+.dlayout__menu-head-name {
+  font-size: 13PX;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dlayout__menu-head-sub {
+  font-size: 11PX;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dlayout__menu-row {

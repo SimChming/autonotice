@@ -1,5 +1,5 @@
 # ============================================================
-# sync-docs.ps1 — HANDOFF.md / requirements.txt 双向同步
+# sync-docs.ps1 — HANDOFF.md / requirements.txt / CONFIGURATION.md 双向同步
 # 本机(default/) <-> 服务器(/opt/qqsched/src/)
 # 规则：内容不同时，mtime 新的覆盖旧的；相同则跳过
 # 依赖：本机公钥已装入服务器 root 的 authorized_keys（免密 SSH）
@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $Host1 = 'root@120.26.224.86'
 $RemoteDir = '/opt/qqsched/src'
 $LocalRoot = 'C:\Users\Surface\Documents\Trae-CN\default'
-$Files = @('HANDOFF.md', 'requirements.txt')
+$Files = @('HANDOFF.md', 'requirements.txt', 'CONFIGURATION.md')
 
 $sshOpts = @('-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-o', 'LogLevel=ERROR', '-o', 'ConnectTimeout=20')
 

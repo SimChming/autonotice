@@ -475,10 +475,15 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images
 		}
 	}
 	final = sanitizeCQ(final, s.capabilities())
-	if err := s.send(ctx, ev, final); err != nil {
+	main, extra := s.followupPlan(ev, final, last.Followups)
+	if err := s.send(ctx, ev, main); err != nil {
 		return err
 	}
-	s.sendFollowups(ctx, ev, last.Followups)
+	// Detach from the websocket handler: the extra segments sleep between sends,
+	// and the event loop must stay free to accept the next message.
+	if len(extra) > 0 {
+		go s.sendFollowups(context.WithoutCancel(ctx), ev, extra)
+	}
 	return nil
 }
 
@@ -864,29 +869,105 @@ func (s *Service) capabilityBlock() string {
 	return "【管理员已关闭的能力】" + strings.Join(off, "、") + "。不要尝试通过 api 调用或 CQ 码发送这些内容。\n"
 }
 
-// sendFollowups delivers the model's extra segments after the main reply, with
-// a randomized delay, only for chat partners allowed by auto_segment settings.
+// followupPlan decides whether the answer should be split into several chat
+// messages. It returns the (possibly shortened) main reply plus the extra
+// segments to send afterwards. When auto-segment is on but the model returned no
+// followups, a long multi-sentence reply is split locally so the feature still
+// takes effect.
+func (s *Service) followupPlan(ev onebot.Event, reply string, parts []string) (string, []string) {
+	if s.settings == nil {
+		return reply, nil
+	}
+	seg := s.settings.Snapshot().AutoSegment
+	if !seg.Enabled || !followupTarget(seg, ev.UserID, s.isOwner(ev.UserID)) {
+		return reply, nil
+	}
+	clean := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			clean = append(clean, p)
+		}
+	}
+	if len(clean) == 0 {
+		all := autoSplit(reply, seg.MaxSegments+1)
+		if len(all) < 2 {
+			return reply, nil
+		}
+		reply, clean = all[0], all[1:]
+	}
+	if len(clean) > seg.MaxSegments {
+		clean = clean[:seg.MaxSegments]
+	}
+	return reply, clean
+}
+
+// followupTarget reports whether this chat partner may receive extra segments.
+func followupTarget(seg settings.AutoSegment, userID string, owner bool) bool {
+	for _, t := range seg.Targets {
+		t = strings.TrimSpace(t)
+		if t == "owner" && owner {
+			return true
+		}
+		if t != "" && t == userID {
+			return true
+		}
+	}
+	return false
+}
+
+// autoSplit breaks a long reply into at most maxParts short messages at
+// sentence/newline boundaries. Short or single-sentence replies stay untouched.
+func autoSplit(reply string, maxParts int) []string {
+	if maxParts < 2 || len([]rune(strings.TrimSpace(reply))) < 60 {
+		return nil
+	}
+	var (
+		out []string
+		cur []rune
+	)
+	flush := func() {
+		if s := strings.TrimSpace(string(cur)); s != "" {
+			out = append(out, s)
+		}
+		cur = cur[:0]
+	}
+	for _, r := range reply {
+		cur = append(cur, r)
+		switch r {
+		case '\n', '。', '！', '？', '!', '?', '～':
+			flush()
+		}
+	}
+	flush()
+	if len(out) < 2 {
+		return nil
+	}
+	// Merge very short fragments (e.g. "好呀。") into the previous segment.
+	merged := make([]string, 0, len(out))
+	for _, p := range out {
+		if n := len(merged); n > 0 && len([]rune(p)) < 12 {
+			merged[n-1] += p
+			continue
+		}
+		merged = append(merged, p)
+	}
+	if len(merged) < 2 {
+		return nil
+	}
+	if len(merged) > maxParts {
+		merged = merged[:maxParts]
+	}
+	return merged
+}
+
+// sendFollowups delivers extra segments with a randomized delay. It is called in
+// a detached goroutine, so a cancelled websocket context never cuts it short.
 func (s *Service) sendFollowups(ctx context.Context, ev onebot.Event, parts []string) {
 	if len(parts) == 0 || s.settings == nil || s.api == nil {
 		return
 	}
 	seg := s.settings.Snapshot().AutoSegment
-	if !seg.Enabled {
-		return
-	}
-	allowed := false
-	for _, t := range seg.Targets {
-		t = strings.TrimSpace(t)
-		if t == "owner" && s.isOwner(ev.UserID) {
-			allowed = true
-			break
-		}
-		if t != "" && t == ev.UserID {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
+	if !seg.Enabled || !followupTarget(seg, ev.UserID, s.isOwner(ev.UserID)) {
 		return
 	}
 	minDelay, maxDelay := seg.MinDelayMS, seg.MaxDelayMS

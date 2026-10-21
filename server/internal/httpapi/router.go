@@ -125,6 +125,10 @@ func NewRouter(d Deps) http.Handler {
 	mux.Handle("GET "+base+"/alerts/me", a.secure(http.HandlerFunc(a.listAlerts)))
 	mux.Handle("POST "+base+"/alerts/me/{id}/read", a.secure(http.HandlerFunc(a.readAlert)))
 
+	// Who am I: tells the client whether this account is the server owner,
+	// so the back-office entry is only shown to the master.
+	mux.Handle("GET "+base+"/me/privileges", a.secure(http.HandlerFunc(a.myPrivileges)))
+
 	// Feedback / Contact Us (authenticated, simple freeform submission).
 	mux.Handle("POST "+base+"/feedback", a.secure(http.HandlerFunc(a.createFeedback)))
 
@@ -133,6 +137,9 @@ func NewRouter(d Deps) http.Handler {
 
 	// Back office: admin-scoped tokens only.
 	mux.HandleFunc("POST "+base+"/admin/login", a.adminLogin)
+	// Owner SSO: a normal user token whose verified QQ binding is the control
+	// QQ gets an admin-scoped token without re-entering the admin password.
+	mux.Handle("POST "+base+"/admin/owner-sso", a.secure(http.HandlerFunc(a.adminOwnerSSO)))
 	mux.Handle("GET "+base+"/admin/me", a.adminSecure(http.HandlerFunc(a.adminMe)))
 	mux.Handle("GET "+base+"/admin/settings", a.adminSecure(http.HandlerFunc(a.adminGetSettings)))
 	mux.Handle("PUT "+base+"/admin/settings", a.adminSecure(http.HandlerFunc(a.adminPutSettings)))

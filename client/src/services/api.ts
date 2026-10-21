@@ -384,6 +384,13 @@ export const api = {
   /** 最近一次留存的思考链（服务端只保留最近一条） */
   getLatestReplan: () => request<LatestReplan>('/schedules/me/replan/latest'),
 
+  /** 当前账号是否为服务器主人（已绑定主人 QQ） */
+  myPrivileges: () => request<{ is_owner: boolean; control_qq: string }>('/me/privileges'),
+
+  /** 主人免密换取后台 token（服务端校验已绑定主人 QQ） */
+  ownerSSO: () =>
+    request<AdminLoginResult>('/admin/owner-sso', { method: 'POST', body: {} }),
+
   /** 健康检查在 API 前缀之外；用 `../../` 跳出 /api/v1 层 */
   healthz: () => request<{ status?: string }>('/../../healthz')
 }

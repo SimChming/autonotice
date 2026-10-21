@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PropsWithChildren } from 'react'
+import { createPortal } from 'react-dom'
 import { Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
+import { api } from '../../services/api'
+import { reschedule } from '../../services/notify/scheduler'
+import { syncAll, syncStatus } from '../../services/sync'
 import { useAlertsStore } from '../../store/alerts'
 import { useAuthStore } from '../../store/auth'
 import { Icon, type IconName } from '../Icon'
 import './index.scss'
 
-type NavKey = 'schedule' | 'calendar' | 'alerts' | 'settings'
+type NavKey = 'schedule' | 'calendar' | 'alerts' | 'settings' | 'admin'
 
 const NAV: Array<{ key: NavKey; label: string; icon: IconName; url: string }> = [
   { key: 'schedule', label: '日程', icon: 'list', url: '/pages/schedule/index' },
@@ -17,10 +21,24 @@ const NAV: Array<{ key: NavKey; label: string; icon: IconName; url: string }> = 
   { key: 'settings', label: '设置', icon: 'gear', url: '/pages/settings/index' }
 ]
 
+const ADMIN_NAV: (typeof NAV)[number] = {
+  key: 'admin',
+  label: '后台',
+  icon: 'shield',
+  url: '/pages/admin/index'
+}
+
 function currentNav(): NavKey {
   const path = Taro.getCurrentInstance().router?.path || ''
+  if (path.includes('/pages/admin/')) return 'admin'
   const hit = NAV.find((n) => path.includes(n.key))
   return hit ? hit.key : 'schedule'
+}
+
+interface MenuPos {
+  left: number
+  bottom: number
+  width: number
 }
 
 /**
@@ -30,36 +48,83 @@ function currentNav(): NavKey {
 export function DesktopLayout({ children }: PropsWithChildren) {
   const token = useAuthStore((s) => s.token)
   const user = useAuthStore((s) => s.user)
+  const bindings = useAuthStore((s) => s.bindings)
+  const isOwner = useAuthStore((s) => s.privileges.isOwner)
   const alerts = useAlertsStore((s) => s.alerts)
   const logout = useAuthStore((s) => s.logout)
   const [active, setActive] = useState<NavKey>(currentNav)
   const [menuOpen, setMenuOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement | null>(null)
+  const [pos, setPos] = useState<MenuPos>({ left: 12, bottom: 84, width: 192 })
+  const [syncing, setSyncing] = useState(false)
+  const btnRef = useRef<HTMLDivElement | null>(null)
 
-  useDidShow(() => setActive(currentNav()))
+  useDidShow(() => {
+    setActive(currentNav())
+    setMenuOpen(false)
+  })
 
   useEffect(() => {
     document.body.classList.add('desktop-ui')
     return () => document.body.classList.remove('desktop-ui')
   }, [])
 
-  // 点击侧边栏空白处关闭用户菜单
+  // 主人身份由服务端判定（已绑定主人 QQ），决定是否显示后台入口
+  useEffect(() => {
+    if (token) void useAuthStore.getState().loadPrivileges()
+  }, [token])
+
+  // macOS 风格：Esc 关闭用户菜单
   useEffect(() => {
     if (!menuOpen) return
-    const handler = (e: MouseEvent) => {
-      const root = rootRef.current
-      if (root && !root.contains(e.target as Node)) {
-        setMenuOpen(false)
-      }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
   }, [menuOpen])
 
   // 未登录：只透传内容（登录页自带桌面居中样式）
   if (!token) return <>{children}</>
 
   const unread = alerts.filter((a) => !a.read_at).length
+  const verifiedBindings = bindings.filter((b) => b.verified).length
+  const status = syncStatus()
+  const nav = isOwner ? [...NAV, ADMIN_NAV] : NAV
+
+  /** 以用户按钮的实时位置为锚点，弹出 fixed 面板（脱离侧栏裁剪/层叠上下文） */
+  function openMenu() {
+    const el = btnRef.current as unknown as HTMLElement | null
+    const rect = el?.getBoundingClientRect?.()
+    if (rect && rect.width > 0) {
+      setPos({
+        left: Math.round(rect.left),
+        bottom: Math.round(window.innerHeight - rect.top + 8),
+        width: Math.round(rect.width)
+      })
+    }
+    setMenuOpen((v) => !v)
+  }
+
+  function go(url: string, redirect = false) {
+    setMenuOpen(false)
+    const nav2 = redirect ? Taro.redirectTo({ url }) : Taro.navigateTo({ url })
+    nav2.catch(() => undefined)
+  }
+
+  async function handleSync() {
+    if (syncing) return
+    setSyncing(true)
+    try {
+      await syncAll()
+      await reschedule({ force: true }).catch(() => undefined)
+      setMenuOpen(false)
+      Taro.showToast({ title: '已同步', icon: 'success' })
+    } catch {
+      Taro.showToast({ title: '网络不可用', icon: 'none' })
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   async function handleLogout() {
     setMenuOpen(false)
@@ -67,8 +132,62 @@ export function DesktopLayout({ children }: PropsWithChildren) {
     Taro.redirectTo({ url: '/pages/login/index' })
   }
 
+  const menu =
+    menuOpen && typeof document !== 'undefined'
+      ? createPortal(
+          <View className='dlayout__menu-layer'>
+            <View className='dlayout__menu-mask' onClick={() => setMenuOpen(false)} />
+            <View
+              className='dlayout__user-menu'
+              style={{
+                left: `${pos.left}px`,
+                bottom: `${pos.bottom}px`,
+                width: `${Math.max(pos.width, 200)}px`,
+                position: 'fixed',
+                zIndex: 10000,
+                background: 'var(--bg-elevated, #ffffff)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <View className='dlayout__menu-head'>
+                <Text className='dlayout__menu-head-name'>{user?.name || '已登录'}</Text>
+                <Text className='dlayout__menu-head-sub'>
+                  {isOwner ? '主人账号 · 后台已解锁' : `服务端 ${api.base}`}
+                </Text>
+              </View>
+              <View className='dlayout__user-menu-sep' />
+
+              <MenuRow
+                icon='link'
+                label='QQ 绑定'
+                hint={verifiedBindings ? `${verifiedBindings} 个已验证` : '未绑定'}
+                onClick={() => go('/pages/bind/index', true)}
+              />
+              <MenuRow
+                icon='refresh'
+                label='立即同步'
+                hint={`待同步 ${status.pending}`}
+                onClick={() => void handleSync()}
+              />
+              <MenuRow
+                icon='user'
+                label='个人信息与提醒'
+                onClick={() => go('/pages/settings/index', true)}
+              />
+              {isOwner ? (
+                <MenuRow icon='shield' label='管理后台' hint='模型 · 能力 · 名单' onClick={() => go('/pages/admin/index')} />
+              ) : null}
+
+              <View className='dlayout__user-menu-sep' />
+              <MenuRow icon='file' label='退出登录' danger onClick={() => void handleLogout()} />
+            </View>
+          </View>,
+          document.body
+        )
+      : null
+
   return (
-    <View ref={rootRef as any} className='dlayout'>
+    <View className='dlayout'>
       <View className='dlayout__sidebar'>
         <View className='dlayout__brand'>
           <Text className='dlayout__brand-logo'>🐋</Text>
@@ -76,7 +195,7 @@ export function DesktopLayout({ children }: PropsWithChildren) {
         </View>
 
         <View className='dlayout__nav'>
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const isActive = active === item.key
             return (
               <View
@@ -101,15 +220,15 @@ export function DesktopLayout({ children }: PropsWithChildren) {
         </View>
 
         <View className='dlayout__foot'>
-          {/* 用户按钮：可点击弹出菜单 */}
           <View
+            ref={btnRef as any}
             className={`dlayout__foot-user pressable${menuOpen ? ' is-open' : ''}`}
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={openMenu}
           >
             <Text className='dlayout__foot-avatar'>{(user?.name || 'U').slice(0, 1).toUpperCase()}</Text>
             <View className='dlayout__foot-meta'>
               <Text className='dlayout__foot-name'>{user?.name || '已登录'}</Text>
-              <Text className='dlayout__foot-sub'>已登录</Text>
+              <Text className='dlayout__foot-sub'>账号与同步</Text>
             </View>
             <Icon
               name='chevron'
@@ -117,47 +236,7 @@ export function DesktopLayout({ children }: PropsWithChildren) {
               strokeWidth={2}
             />
           </View>
-
-          {/* 用户菜单 */}
-          {menuOpen ? (
-            <View className='dlayout__user-menu'>
-              <MenuRow
-                icon='user'
-                label='个人信息'
-                hint={user?.name || ''}
-                onClick={() => {
-                  setMenuOpen(false)
-                  Taro.navigateTo({ url: '/pages/settings/index' })
-                }}
-              />
-              <MenuRow
-                icon='gear'
-                label='设置'
-                onClick={() => {
-                  setMenuOpen(false)
-                  Taro.redirectTo({ url: '/pages/settings/index' })
-                }}
-              />
-              <MenuRow
-                icon='bell'
-                label='联系我们'
-                onClick={() => {
-                  setMenuOpen(false)
-                  Taro.navigateTo({ url: '/pages/feedback/index' })
-                }}
-              />
-              <MenuRow
-                icon='bell'
-                label='提醒偏好'
-                onClick={() => {
-                  setMenuOpen(false)
-                  Taro.redirectTo({ url: '/pages/settings/index' })
-                }}
-              />
-              <View className='dlayout__user-menu-sep' />
-              <MenuRow icon='file' label='退出登录' danger onClick={() => void handleLogout()} />
-            </View>
-          ) : null}
+          {menu}
         </View>
       </View>
 

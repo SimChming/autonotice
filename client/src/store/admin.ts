@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import { AdminApiError, adminApi } from '../services/api'
+import { AdminApiError, adminApi, api } from '../services/api'
 import type {
   AdminAuditEntry,
   AdminDocFile,
@@ -24,6 +24,7 @@ interface AdminState {
 
   hydrate: () => void
   login: (username: string, password: string) => Promise<void>
+  loginWithOwner: () => Promise<void>
   logout: () => void
   refresh: () => Promise<void>
   saveSettings: (patch: Record<string, unknown>) => Promise<void>
@@ -55,6 +56,15 @@ export const useAdminStore = create<AdminState>((set, get) => ({
 
   login: async (username, password) => {
     const res = await adminApi.login(username, password)
+    setRaw(KEYS.adminToken, res.token)
+    setJSON(KEYS.adminUser, res.admin)
+    set({ token: res.token, admin: res.admin })
+    await get().refresh()
+  },
+
+  /** 主人免密进入：服务端校验「已绑定主人 QQ」后直接签发后台 token */
+  loginWithOwner: async () => {
+    const res = await api.ownerSSO()
     setRaw(KEYS.adminToken, res.token)
     setJSON(KEYS.adminUser, res.admin)
     set({ token: res.token, admin: res.admin })

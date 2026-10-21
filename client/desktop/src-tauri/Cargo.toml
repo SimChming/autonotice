@@ -1,6 +1,6 @@
 [package]
 name = "autonotice"
-version = "1.0.1"
+version = "1.0.2"
 description = "Autonotice — AI Schedule Assistant (Tauri 2 desktop shell)"
 authors = ["Autonotice Team"]
 edition = "2021"
