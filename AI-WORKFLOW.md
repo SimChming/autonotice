@@ -352,14 +352,14 @@ GET  /api/v1/admin/overview                 → 连接状态/配额/审计
 
 **任务**
 
-- [ ] Vite + React 骨架，路由/守卫/store 从旧 Taro 代码逐页迁移（页面清单见 §4.3；样式 scss 与组件逻辑直接搬，去掉 Taro API 换 web 标准）
-- [ ] 不要暴露服务器的后台地址给普通用户，只有主人可以看到后台
-- [ ] `services/api.ts` 用 shared 类型；API 地址一律**同源相对路径** `/api/v1`
+- [x] Vite + React 骨架，路由/守卫/store 从旧 Taro 代码逐页迁移（页面清单见 §4.3；样式 scss 与组件逻辑直接搬，去掉 Taro API 换 web 标准）
+- [x] 不要暴露服务器的后台地址给普通用户，只有主人可以看到后台
+- [x] `services/api.ts` 用 shared 类型；API 地址一律**同源相对路径** `/api/v1`
 - [ ] `services/notify/` 平台分流（web Notification / capacitor local-notifications / tauri plugin）
-- [ ] 分辨率自适应：根据OS和像素比例用侧边栏布局，否则手机布局，监听 resize/orientation 即时切换
+- [x] 分辨率自适应：根据OS和像素比例用侧边栏布局，否则手机布局，监听 resize/orientation 即时切换
 - [ ] 一键排程页：中文思考链折叠展示、每条日程显示群聊来源（群号+头像+群名）
 - [ ] Capacitor 壳（`usesCleartextTraffic=true`、androidScheme=http）出 debug APK；Tauri 壳出 exe/msi（**不得有 notification 空配置**）
-- [ ] server 用 `@fastify/static` 内嵌 client 构建产物（容器内 copy）
+- [x] server 用 `@fastify/static` 内嵌 client 构建产物（容器内 copy）
 
 **验收**：浏览器 + Android 真机 + Windows exe 三端登录同一账号看到同一日程；Android/Windows 明文 HTTP 访问服务器不报「网络不可用」；到点手机弹本地通知并可震动。
 
@@ -517,4 +517,7 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-22 Phase 4：提醒调度用 node-cron 每 30 秒扫描，WS 离线时走后 QQ 私聊兜底；默认提醒时间 = due_at 前 30 分钟。
 - 2026-10-22 Phase 4：去重优先 LLM 判断，异常时回退「标题归一化 + 同截止日」确定性判定；实测重复消息未产生新行。
 - 2026-10-22 Phase 4：抽取仅对「已绑定用户」在群内的消息触发，避免全群消息都消耗 LLM；链接抓取失败不阻塞抽取。
+- 2026-10-22 Phase 5：客户端已实现 login/bind/schedule/alerts/settings 五页 + 侧边栏/TabBar 自适应 + WS toast；浏览器实测注册→建日程→完成→刷新保持全部通过。
+- 2026-10-22 Phase 5：服务端新增 `/api/v1/schedules`（GET/POST/PATCH/DELETE）与 `/api/v1/alerts`，并通过 `@fastify/static` 同源托管 client 构建产物（SPA 回退 index.html）。
+- 2026-10-22 Phase 5：本机无 Android SDK 与 Rust/cargo，Capacitor/Tauri 原生壳暂未构建；一键排程页与平台通知分流留待后续。
 
