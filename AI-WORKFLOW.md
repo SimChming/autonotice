@@ -507,4 +507,8 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-21 Phase 1：NapCat WebUI 的 6099 端口按 §8.3 运维方式对公网放行（扫描二维码需要），服务器 ufw 同时放行 22/8080/6099。
 - 2026-10-21 Phase 1：CI 部署使用专用 ed25519 密钥 `~/.ssh/autonotice_deploy`（已加入服务器 authorized_keys），私钥写入仓库 Actions Secret `SSH_PRIVATE_KEY`，不提交入库。
 - 2026-10-21 Phase 2：现有 classic PAT 仅 `repo` scope，无法推送 `.github/workflows/`；推送与 CI 验证需 token 补 `workflow` scope 后继续。
+- 2026-10-21 Phase 1：Docker Hub 直连及各公共镜像均不稳定，最终用 `hub.rat.dev/mlikiowa/napcat-docker:latest` 拉取后重打 tag 为 `mlikiowa/napcat-docker:latest`；NapCat WebUI 端口 6099 正常。
+- 2026-10-21 Phase 1：NapCat 容器新增 `./napcat/qq:/app/.config/QQ` 挂载以持久化 QQ 登录态，避免重建容器后重复扫码。
+- 2026-10-21 Phase 2：服务器从 ghcr.io 拉取镜像速度约 100 KB/s，部署脚本超时放宽到 1800s、ssh-action `command_timeout: 30m`；首次拉取耗时较长，后续命中本地层会明显加快。
+- 2026-10-21 Phase 2：为在 v2 分支完成验收，deploy.yml 的 push 触发分支暂含 `v2`，Phase 8 合并回 main 后可恢复仅 main。
 

@@ -21,6 +21,12 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     maxAge: 86_400,
   });
 
+  app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("x-content-type-options", "nosniff");
+    reply.header("referrer-policy", "no-referrer");
+    return payload;
+  });
+
   app.get("/api/v1/healthz", async () => {
     return healthResponseSchema.parse({
       status: "ok",
