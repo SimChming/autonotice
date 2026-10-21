@@ -502,4 +502,9 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-21 Phase 2：服务端构建采用 `tsc` 输出 + 镜像内保留 `/repo` 目录布局复制 `node_modules`（不做 esbuild 打包），为 Phase 3 引入原生模块 `better-sqlite3` 留出余地。
 - 2026-10-21 Phase 2：客户端 Vite 用别名直接解析 `packages/shared/src/index.ts`，避免 shared `dist` 过期导致契约不一致。
 - 2026-10-21 Phase 2：本地 pnpm 通过 `corepack enable --install-directory %LOCALAPPDATA%\node-shims` 安装（无管理员权限），未写入全局 nodejs 目录。
+- 2026-10-21 Phase 1：服务器重置镜像实际为 Ubuntu 22.04.5（非 24.04），Docker 29.1.3 + Compose 2.40.3（apt 源 docker.io / docker-compose-v2），按 22.04 继续推进。
+- 2026-10-21 Phase 1：服务器直连 Docker Hub 超时，已在 `/etc/docker/daemon.json` 配置镜像加速 `docker.1ms.run` + `docker.m.daocloud.io`；ghcr.io 从该服务器可达（401 属正常鉴权响应），部署链路不受影响。
+- 2026-10-21 Phase 1：NapCat WebUI 的 6099 端口按 §8.3 运维方式对公网放行（扫描二维码需要），服务器 ufw 同时放行 22/8080/6099。
+- 2026-10-21 Phase 1：CI 部署使用专用 ed25519 密钥 `~/.ssh/autonotice_deploy`（已加入服务器 authorized_keys），私钥写入仓库 Actions Secret `SSH_PRIVATE_KEY`，不提交入库。
+- 2026-10-21 Phase 2：现有 classic PAT 仅 `repo` scope，无法推送 `.github/workflows/`；推送与 CI 验证需 token 补 `workflow` scope 后继续。
 
