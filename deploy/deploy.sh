@@ -4,13 +4,10 @@ set -eu
 
 cd "$(dirname "$0")"
 
-echo "[1/3] 拉取最新镜像"
-timeout 1800 docker compose pull server
+echo "[1/2] 启动服务（镜像由 CI 通过 SSH 传入，不在服务器拉取）"
+docker compose up -d server
 
-echo "[2/3] 启动服务"
-docker compose up -d
-
-echo "[3/3] 健康检查"
+echo "[2/2] 健康检查"
 i=0
 while [ "$i" -lt 30 ]; do
   if curl -fsS http://127.0.0.1:8080/api/v1/healthz >/dev/null 2>&1; then
