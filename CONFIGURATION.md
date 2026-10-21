@@ -138,8 +138,18 @@ curl -s -X POST http://127.0.0.1:8080/api/v1/admin/settings/test-llm \
 
 ## 4. 主人 / 白名单
 
-- 内置主人 QQ：`3874095145`（`CONTROL_QQ`，拥有 shell 与后台权限）。
-- 追加/移除主人：`POST /api/v1/admin/owners`、`DELETE /api/v1/admin/owners/{qq}`。
+- 内置主人 QQ：`3874095145`（`CONTROL_QQ`，恒为 `owner`，不可删除 / 降级，拥有 shell 与后台权限）。
+- 四档角色存于 `bot_roles` 表（`qq` 主键 + `role` + `note` + `enabled`），后台可增删改，30 秒内热生效：
+
+| 角色 | 权限 |
+| --- | --- |
+| `owner` | 全部权限：shell、写入系统级偏好、操作任意已绑定账号、后台 SSO |
+| `admin` | 可驱动机器人 / OneBot / Autonotice 动作，但不能执行 shell、不能写系统偏好 |
+| `member` | 正常聊天 + 调用系统能力（默认） |
+| `guest` | 只能文字聊天，Autonotice / OneBot 动作一律拒绝 |
+
+- `GET/POST /api/v1/admin/bot-users`、`DELETE /api/v1/admin/bot-users/{qq}` 管理角色；内置主人只允许 `owner`，尝试降级 / 删除返回 `409`。
+- 旧的 `settings.owners` 名单仍作为 `owner` 兼容保留，启动时以 `INSERT OR IGNORE` 写入 `bot_roles`，不覆盖后台已改过的角色。
 - 客户端账号「杨镇赫的机器人」已绑定该 QQ，服务端 `GET /api/v1/me/privileges` 会返回 `is_owner=true`；
   客户端据此显示「后台」入口，并用 `POST /api/v1/admin/owner-sso` 免密换取后台 token。
 - 非主人 QQ 请求 shell / root 时，只回复调皮的拒绝话术，不消耗模型额度。
@@ -151,7 +161,9 @@ curl -s -X POST http://127.0.0.1:8080/api/v1/admin/settings/test-llm \
 | POST | `/api/v1/admin/login` | 账号密码登录，拿 admin token |
 | GET/PUT | `/api/v1/admin/settings` | 读取 / 修改运行配置 |
 | POST | `/api/v1/admin/settings/test-llm` | 测试模型连通 |
-| GET/POST/DELETE | `/api/v1/admin/owners` | 主人白名单 |
+| GET/POST | `/api/v1/admin/bot-users` | QQ 用户与角色列表 / 新增或修改 |
+| DELETE | `/api/v1/admin/bot-users/{qq}` | 移除某个 QQ 的角色配置 |
+| GET/POST/DELETE | `/api/v1/admin/owners` | 旧主人白名单（兼容保留） |
 | GET | `/api/v1/admin/status` | NapCat / 模型 / 文档状态 |
 | GET | `/api/v1/admin/audit` | 管理操作审计 |
 | GET | `/api/v1/admin/doc-files` | 文档生成记录 |
@@ -207,7 +219,23 @@ QQ 机器人侧（模型输出字段）：
   - 总结流程也会抽取「目标用户本人明确强调的长期偏好」（每轮最多 3 条，每条 ≤120 字），写库前同样校验主人身份。
   - 下一轮聊天时，服务端直接按 `(scope='global' OR 本人)` 查出偏好，作为【长期偏好】块注入 prompt（最多 12 条），不依赖关键词命中。
 
+### 5.2 三层上下文记忆（QQ 机器人）
+
+参考业界常用的「短期缓冲 + 滚动摘要 + 长期检索」架构，全部落库、重启不丢：
+
+| 层 | 载体 | 行为 |
+| --- | --- | --- |
+| L0 工作缓冲 | 内存 `history` + 表 `bot_turns` | 每个会话保留最近 `HistoryTurns` 轮；进程启动后首次触达会话时从 `bot_turns` 水合一次 |
+| L1 滚动摘要 | 表 `bot_summaries` | 未摘要 turn ≥16 条时，后台异步把较早的（保留最新 10 条原文）压缩成 ≤700 字摘要，注入 prompt 时截断到 900 字；失败不影响回复 |
+| L2 长期记忆 | 表 `memories` | 跨会话（当前群 + 该 QQ 在其他会话的片段）候选 200 条，按关键词命中 ×2、同发言人 +3、同会话 +1.5、时效加分排序，取 TopN（默认 5）；无关键词命中且分数 <4.5 直接丢弃 |
+
+- `bot_turns` 每会话保留 120 条，写库是 fire-and-forget（5s 超时），慢盘不会拖慢回复。
+- 摘要与偏好互不替代：`kind=preference` 的偏好仍每轮全量注入（≤12 条）。
+- 原有 `memories` 数据、`summary_cursors`、偏好配置全部沿用，不需要迁移脚本。
+- 发送安全：回复按 CQ 码原子边界分块（`splitMessage`），图片 / 文件 / 语音等 CQ 码绝不截断；即使自动分段关闭，`segments` 里的 API / Autonotice 动作仍会执行，不再出现「说要发图片却没有发」。
+
 ---
+
 
 ## 6. 编译与部署（服务器上）
 
@@ -240,6 +268,9 @@ sleep 2 && curl -s http://127.0.0.1:8080/healthz
 | 客户端提示网络不可用 | CORS / 明文流量 / API_BASE 同源配置问题，见 HANDOFF.md |
 | 后台设置保存后旧值还在 | `api_key` 掩码含 `*` 被忽略，属于预期行为 |
 | 自主补发不生效 | `auto_segment.enabled=false`，或发送者不在 `targets` 里 |
+| 说要发图片 / 文件却没发 | 旧版本按宽度硬切导致 CQ 码截断、或分段关闭后动作被丢弃；1.0.5 起改用 CQ 原子分块并兜底执行 segments 动作 |
+| 机器人「失忆」 | 检查 `bot_turns` / `bot_summaries` 是否增长；L1 摘要需模型可用，失败只记 warn 不影响聊天 |
+| 新增用户后权限没变化 | 角色缓存 30 秒 TTL，等半分钟或重启；确认 `bot_roles.enabled=1` |
 | QQ 里让机器人设提醒没反应 | 该 QQ 未绑定 Autonotice 账号；先在客户端登录并绑定，再让机器人操作 |
 | Agent 动作成功但手机没弹 | 客户端未打开/未授权通知；动作在队列里，客户端上线轮询后会补发并 ack |
 | Agent 调 `target_qq` 返回 403 | 调用者不是主人；普通账号只能操作自己 |
@@ -254,3 +285,4 @@ sleep 2 && curl -s http://127.0.0.1:8080/healthz
 - 2026-10-21 主人：`auto_segment` 默认开启（targets=`owner`，1.2–2.6s，最多 3 段），并要求模型优先「一次问完所有缺失信息、先结论后补充」。
 - 2026-10-21 主人：新增 Autonotice Agent API（`/agent/catalog`、`/agent/actions`、`/me/actions`、ack），QQ 机器人新增 `autonotice` 工具字段并明确自己是 Autonotice 的一部分；普通账号只能操作自己绑定的账号，主人可指定 target。
 - 2026-10-21 主人：总结改为按 `(user_id, group_id)` 游标增量汇总（`?full=1` 才整窗重扫）；新增 `kind=preference/scope=global` 长期偏好记忆，仅主人可写入并每轮注入；多段回复改用 `segments`（段间可插 API/Autonotice 动作，保证递进连续）；新增 `babble` 群内随机冒泡（时段 6-8/11-13/16-24，每天 ≤3 条）。
+- 2026-10-21 鲸鱼娘：v1.0.5 —— 记忆重构为 L0 `bot_turns` / L1 `bot_summaries` / L2 跨会话召回；权限改为 `bot_roles` 四档角色并新增后台「QQ 用户与权限」管理；修复 CQ 码被硬切导致图片/文件发送失败、以及分段关闭时 segments 动作被丢弃的问题；文档、语音、视频、表情、撤回发送已统一走能力开关 + 原子分块。

@@ -107,10 +107,10 @@ type SummaryRun struct {
 // ContentAsset is one recognized file / link / miniapp card with its fetch
 // result and blocked verdict.
 type ContentAsset struct {
-	ID            string     `json:"id"`
-	GroupID       string     `json:"group_id"`
-	MessageID     string     `json:"message_id"`
-	SenderQQ      string     `json:"sender_qq"`
+	ID        string `json:"id"`
+	GroupID   string `json:"group_id"`
+	MessageID string `json:"message_id"`
+	SenderQQ  string `json:"sender_qq"`
 	// MessageType: "group" | "private" — 告警来源区分用。
 	MessageType   string     `json:"message_type"`
 	Kind          string     `json:"kind"`

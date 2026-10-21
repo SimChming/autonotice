@@ -2,6 +2,7 @@ import Taro from '@tarojs/taro'
 
 import type {
   AdminAuditEntry,
+  AdminBotUsers,
   AdminDocFile,
   AdminLoginResult,
   AdminOwner,
@@ -14,6 +15,7 @@ import type {
   AuthResult,
   BindCode,
   Binding,
+  BotRole,
   DeltaResult,
   LatestReplan,
   ReplanEvent,
@@ -520,6 +522,14 @@ export const adminApi = {
     ),
 
   status: () => adminRequest<AdminStatus>('/admin/status', { timeout: 15000 }),
+
+  listBotUsers: () => adminRequest<AdminBotUsers>('/admin/bot-users'),
+
+  upsertBotUser: (qq: string, role: BotRole, note: string) =>
+    adminRequest<AdminBotUsers>('/admin/bot-users', { method: 'POST', body: { qq, role, note } }),
+
+  deleteBotUser: (qq: string) =>
+    adminRequest<AdminBotUsers>(`/admin/bot-users/${encodeURIComponent(qq)}`, { method: 'DELETE' }),
 
   docFiles: (limit = 50) => adminRequest<{ files: AdminDocFile[] }>(`/admin/doc-files?limit=${limit}`),
 

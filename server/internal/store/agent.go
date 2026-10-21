@@ -115,12 +115,12 @@ func (s *Store) MarkAgentActionDelivered(ctx context.Context, id string) error {
 
 func scanAgentAction(row rowScanner) (*AgentAction, error) {
 	var (
-		a        AgentAction
-		payload  sql.NullString
-		dueAt    sql.NullInt64
-		created  sql.NullInt64
-		deliv    sql.NullInt64
-		acked    sql.NullInt64
+		a       AgentAction
+		payload sql.NullString
+		dueAt   sql.NullInt64
+		created sql.NullInt64
+		deliv   sql.NullInt64
+		acked   sql.NullInt64
 	)
 	if err := row.Scan(&a.ID, &a.UserID, &a.UserQQ, &a.Action, &a.Title, &a.Body,
 		&payload, &a.Source, &dueAt, &created, &deliv, &acked); err != nil {

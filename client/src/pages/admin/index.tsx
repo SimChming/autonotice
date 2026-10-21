@@ -6,8 +6,19 @@ import { PageHeader } from '../../components/PageHeader'
 import { errorMessage } from '../../services/api'
 import { useAdminStore } from '../../store/admin'
 import { useAuthStore } from '../../store/auth'
-import type { AdminDocFile, AdminSettings, Capabilities, CapabilityKey } from '../../types'
+import type { AdminDocFile, AdminSettings, BotRole, Capabilities, CapabilityKey } from '../../types'
 import './index.scss'
+
+const ROLE_OPTIONS: Array<{ key: BotRole; label: string; desc: string }> = [
+  { key: 'owner', label: '主人', desc: '全部权限：shell、系统偏好、任意账号操作' },
+  { key: 'admin', label: '管理员', desc: '可驱动系统能力，但不能执行 shell' },
+  { key: 'member', label: '成员', desc: '正常聊天 + 调用系统能力' },
+  { key: 'guest', label: '访客', desc: '只能聊天，系统能力全部关闭' }
+]
+
+function roleLabel(role: BotRole): string {
+  return ROLE_OPTIONS.find((r) => r.key === role)?.label || role
+}
 
 const CAP_LABELS: Array<{ key: CapabilityKey; label: string; desc: string }> = [
   { key: 'image', label: '图片', desc: '发送 / 上传图片' },
@@ -102,6 +113,7 @@ export default function AdminPage() {
   const settings = useAdminStore((s) => s.settings)
   const status = useAdminStore((s) => s.status)
   const owners = useAdminStore((s) => s.owners)
+  const botUsers = useAdminStore((s) => s.botUsers)
   const controlQQ = useAdminStore((s) => s.controlQQ)
   const docs = useAdminStore((s) => s.docs)
   const audit = useAdminStore((s) => s.audit)
@@ -129,6 +141,7 @@ export default function AdminPage() {
   const [testing, setTesting] = useState(false)
   const [newQQ, setNewQQ] = useState('')
   const [newNote, setNewNote] = useState('')
+  const [newRole, setNewRole] = useState<BotRole>('member')
   const [ownerBusy, setOwnerBusy] = useState(false)
   const [resending, setResending] = useState('')
 
@@ -233,17 +246,17 @@ export default function AdminPage() {
     }
   }
 
-  async function addOwner() {
+  async function saveBotUser() {
     if (!/^\d{5,15}$/.test(newQQ.trim())) {
       Taro.showToast({ title: '请输入正确的 QQ 号', icon: 'none' })
       return
     }
     setOwnerBusy(true)
     try {
-      await useAdminStore.getState().addOwner(newQQ.trim(), newNote.trim())
+      await useAdminStore.getState().saveBotUser(newQQ.trim(), newRole, newNote.trim())
       setNewQQ('')
       setNewNote('')
-      Taro.showToast({ title: '已添加', icon: 'success' })
+      Taro.showToast({ title: '已保存', icon: 'success' })
     } catch (err) {
       Taro.showToast({ title: errorMessage(err), icon: 'none' })
     } finally {
@@ -251,18 +264,24 @@ export default function AdminPage() {
     }
   }
 
-  async function removeOwner(qq: string) {
-    const r = await Taro.showModal({ title: '移除主人', content: `确定取消 ${qq} 的主人权限？` })
+  async function removeBotUser(qq: string) {
+    const r = await Taro.showModal({ title: '移除用户', content: `确定移除 QQ ${qq} 的权限配置？` })
     if (!r.confirm) return
     setOwnerBusy(true)
     try {
-      await useAdminStore.getState().deleteOwner(qq)
+      await useAdminStore.getState().deleteBotUser(qq)
       Taro.showToast({ title: '已移除', icon: 'success' })
     } catch (err) {
       Taro.showToast({ title: errorMessage(err), icon: 'none' })
     } finally {
       setOwnerBusy(false)
     }
+  }
+
+  function editBotUser(qq: string, role: BotRole, note: string) {
+    setNewQQ(qq)
+    setNewRole(role)
+    setNewNote(note)
   }
 
   async function resend(file: AdminDocFile) {
@@ -616,35 +635,46 @@ export default function AdminPage() {
           </Text>
         </View>
 
-        {/* ---------- 主人名单 ---------- */}
-        <Text className='section-title'>主人权限</Text>
+        {/* ---------- QQ 用户与权限 ---------- */}
+        <Text className='section-title'>QQ 用户与权限</Text>
         <View className='admin__card card'>
           <View className='admin__row'>
-            <Text className='admin__label'>内置主人（不可删除）</Text>
+            <Text className='admin__label'>内置主人（不可删除 / 降级）</Text>
             <Text className='admin__value'>{controlQQ || '—'}</Text>
           </View>
-          {owners.map((o) => (
-            <View key={o.qq}>
-              <View className='divider' />
-              <View className='admin__row'>
-                <View className='admin__row-main'>
-                  <Text className='admin__label'>QQ {o.qq}</Text>
-                  <Text className='admin__sub'>
-                    {o.note || '无备注'} · {fmtTime(o.created_at)}
-                  </Text>
-                </View>
-                <View
-                  className={`admin__small-btn pressable${ownerBusy ? ' is-busy' : ''}`}
-                  onClick={() => void removeOwner(o.qq)}
-                >
-                  <Text className='admin__small-btn-text'>移除</Text>
+          {botUsers
+            .filter((u) => u.qq !== controlQQ)
+            .map((u) => (
+              <View key={u.qq}>
+                <View className='divider' />
+                <View className='admin__row'>
+                  <View className='admin__row-main'>
+                    <Text className='admin__label'>
+                      QQ {u.qq} · {roleLabel(u.role)}
+                      {u.enabled ? '' : '（已停用）'}
+                    </Text>
+                    <Text className='admin__sub'>
+                      {u.note || '无备注'} · {fmtTime(u.updated_at)}
+                    </Text>
+                  </View>
+                  <View
+                    className='admin__small-btn pressable'
+                    onClick={() => editBotUser(u.qq, u.role, u.note)}
+                  >
+                    <Text className='admin__small-btn-text is-neutral'>修改</Text>
+                  </View>
+                  <View
+                    className={`admin__small-btn pressable${ownerBusy ? ' is-busy' : ''}`}
+                    onClick={() => void removeBotUser(u.qq)}
+                  >
+                    <Text className='admin__small-btn-text'>移除</Text>
+                  </View>
                 </View>
               </View>
-            </View>
-          ))}
+            ))}
           <View className='divider' />
           <View className='admin__field'>
-            <Text className='admin__label'>新增主人 QQ</Text>
+            <Text className='admin__label'>QQ 号（新增或覆盖）</Text>
             <Input
               className='admin__input'
               type='number'
@@ -652,6 +682,23 @@ export default function AdminPage() {
               placeholder='QQ 号'
               onInput={(e) => setNewQQ(e.detail.value)}
             />
+          </View>
+          <View className='admin__field'>
+            <Text className='admin__label'>角色</Text>
+            <View className='admin__role-row'>
+              {ROLE_OPTIONS.map((r) => (
+                <View
+                  key={r.key}
+                  className={`admin__role-chip pressable${newRole === r.key ? ' is-active' : ''}`}
+                  onClick={() => setNewRole(r.key)}
+                >
+                  <Text className={`admin__role-chip-text${newRole === r.key ? ' is-active' : ''}`}>
+                    {r.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <Text className='admin__sub'>{ROLE_OPTIONS.find((r) => r.key === newRole)?.desc}</Text>
           </View>
           <View className='admin__field'>
             <Text className='admin__label'>备注</Text>
@@ -665,11 +712,18 @@ export default function AdminPage() {
           <View className='admin__actions'>
             <View
               className={`admin__btn pressable${ownerBusy ? ' is-busy' : ''}`}
-              onClick={() => void addOwner()}
+              onClick={() => void saveBotUser()}
             >
-              <Text className='admin__btn-text'>添加主人</Text>
+              <Text className='admin__btn-text'>保存用户</Text>
             </View>
           </View>
+          <Text className='admin__hint'>
+            主人 = 全部权限（shell、系统偏好、任意账号）；管理员 = 可驱动系统能力但不能进 shell；成员 =
+            正常使用；访客 = 只能聊天。权限变更约 30 秒内生效。
+          </Text>
+          {owners.length > 0 ? (
+            <Text className='admin__hint'>旧主人名单仍有 {owners.length} 个 QQ，作为兼容保留。</Text>
+          ) : null}
         </View>
 
         {/* ---------- 保存 ---------- */}

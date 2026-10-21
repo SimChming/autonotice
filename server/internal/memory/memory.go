@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/qqsched/server/internal/store"
@@ -69,12 +70,13 @@ func (s *Service) Preferences(ctx context.Context, senderQQ string, limit int) [
 }
 
 // Recall returns the fragments most relevant to the current message, best first.
+// Candidates span both the current chat and this speaker's other chats, so a
+// person met in private is still recognised when they speak in a group.
 func (s *Service) Recall(ctx context.Context, sessionKey, senderQQ, query string, limit int) []store.Memory {
 	if s == nil || s.st == nil || limit <= 0 || sessionKey == "" {
 		return nil
 	}
-	terms := Keywords(query)
-	cands, err := s.st.SearchMemories(ctx, sessionKey, terms, limit)
+	cands, err := s.st.RecallMemories(ctx, sessionKey, senderQQ, limit)
 	if err != nil {
 		s.log.Warn("recall memories", "session", sessionKey, "err", err)
 		return nil
@@ -82,23 +84,44 @@ func (s *Service) Recall(ctx context.Context, sessionKey, senderQQ, query string
 	if len(cands) == 0 {
 		return nil
 	}
+	terms := Keywords(query)
+	now := time.Now()
 
 	type scored struct {
 		m     store.Memory
-		score int
+		score float64
 	}
 	ranked := make([]scored, 0, len(cands))
 	for _, m := range cands {
 		hay := strings.ToLower(m.Content + " " + m.Tags)
-		score := 0
+		hits := 0
 		for _, t := range terms {
 			if strings.Contains(hay, t) {
-				score += 2
+				hits++
 			}
 		}
-		// Fragments that came from the same speaker matter more in a group.
+		score := float64(hits) * 2
+		// Same speaker and same chat are both strong signals.
 		if senderQQ != "" && m.SenderQQ == senderQQ {
 			score += 3
+		}
+		if m.SessionKey == sessionKey {
+			score += 1.5
+		}
+		// Gentle recency bonus: things from the last week outrank old trivia.
+		age := now.Sub(m.CreatedAt)
+		switch {
+		case age < 24*time.Hour:
+			score += 2
+		case age < 7*24*time.Hour:
+			score += 1
+		case age > 90*24*time.Hour:
+			score -= 1
+		}
+		// With no keyword hit, only keep very recent same-speaker fragments,
+		// otherwise irrelevant trivia floods the prompt.
+		if hits == 0 && score < 4.5 {
+			continue
 		}
 		ranked = append(ranked, scored{m: m, score: score})
 	}

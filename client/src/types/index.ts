@@ -261,6 +261,24 @@ export interface AdminOwner {
   created_at: string
 }
 
+/** QQ 机器人的四档角色：owner > admin > member > guest */
+export type BotRole = 'owner' | 'admin' | 'member' | 'guest'
+
+export interface BotUser {
+  qq: string
+  role: BotRole
+  note: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminBotUsers {
+  control_qq: string
+  users: BotUser[]
+  roles: BotRole[]
+}
+
 export interface AdminStatus {
   version: string
   uptime: string

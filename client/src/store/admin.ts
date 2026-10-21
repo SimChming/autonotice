@@ -7,7 +7,9 @@ import type {
   AdminOwner,
   AdminSettings,
   AdminStatus,
-  AdminUser
+  AdminUser,
+  BotRole,
+  BotUser
 } from '../types'
 import { KEYS, getJSON, getRaw, removeRaw, setJSON, setRaw } from '../utils/storage'
 
@@ -17,6 +19,7 @@ interface AdminState {
   settings: AdminSettings | null
   status: AdminStatus | null
   owners: AdminOwner[]
+  botUsers: BotUser[]
   controlQQ: string
   docs: AdminDocFile[]
   audit: AdminAuditEntry[]
@@ -30,6 +33,8 @@ interface AdminState {
   saveSettings: (patch: Record<string, unknown>) => Promise<void>
   addOwner: (qq: string, note: string) => Promise<void>
   deleteOwner: (qq: string) => Promise<void>
+  saveBotUser: (qq: string, role: BotRole, note: string) => Promise<void>
+  deleteBotUser: (qq: string) => Promise<void>
   testLLM: () => Promise<string>
   resendDoc: (id: string) => Promise<void>
 }
@@ -44,6 +49,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
   settings: null,
   status: null,
   owners: [],
+  botUsers: [],
   controlQQ: '',
   docs: [],
   audit: [],
@@ -80,6 +86,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       settings: null,
       status: null,
       owners: [],
+      botUsers: [],
       controlQQ: '',
       docs: [],
       audit: []
@@ -90,9 +97,10 @@ export const useAdminStore = create<AdminState>((set, get) => ({
     if (!isAuthed()) return
     set({ loading: true })
     try {
-      const [settings, ownerList, status, docRes, auditRes] = await Promise.all([
+      const [settings, ownerList, botUsers, status, docRes, auditRes] = await Promise.all([
         adminApi.getSettings(),
         adminApi.listOwners(),
+        adminApi.listBotUsers(),
         adminApi.status(),
         adminApi.docFiles(50),
         adminApi.audit(50)
@@ -100,7 +108,8 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       set({
         settings,
         owners: ownerList.owners || [],
-        controlQQ: ownerList.control_qq || settings.control_qq,
+        botUsers: botUsers.users || [],
+        controlQQ: botUsers.control_qq || ownerList.control_qq || settings.control_qq,
         status,
         docs: docRes.files || [],
         audit: auditRes.audit || []
@@ -126,6 +135,16 @@ export const useAdminStore = create<AdminState>((set, get) => ({
   deleteOwner: async (qq) => {
     const res = await adminApi.deleteOwner(qq)
     set({ owners: res.owners || [], controlQQ: res.control_qq })
+  },
+
+  saveBotUser: async (qq, role, note) => {
+    const res = await adminApi.upsertBotUser(qq, role, note)
+    set({ botUsers: res.users || [], controlQQ: res.control_qq })
+  },
+
+  deleteBotUser: async (qq) => {
+    const res = await adminApi.deleteBotUser(qq)
+    set({ botUsers: res.users || [], controlQQ: res.control_qq })
   },
 
   testLLM: async () => {

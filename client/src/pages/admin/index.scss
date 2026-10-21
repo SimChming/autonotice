@@ -167,6 +167,39 @@
   color: var(--danger);
 }
 
+.admin__small-btn-text.is-neutral {
+  color: var(--text-secondary);
+}
+
+.admin__role-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.admin__role-chip {
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid transparent;
+}
+
+.admin__role-chip.is-active {
+  background: rgba(10, 132, 255, 0.12);
+  border-color: #0a84ff;
+}
+
+.admin__role-chip-text {
+  font-size: 23px;
+  color: var(--text-secondary);
+}
+
+.admin__role-chip-text.is-active {
+  color: #0a84ff;
+  font-weight: 600;
+}
+
 .admin__save {
   display: flex;
   padding: 4px 0 30px;

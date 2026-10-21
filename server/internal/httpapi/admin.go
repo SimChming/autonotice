@@ -67,20 +67,27 @@ func (a *api) currentUserIsOwner(ctx context.Context) bool {
 		return false
 	}
 	for _, b := range bindings {
-		if b.Verified && a.isOwnerQQ(b.QQUID) {
+		if b.Verified && a.isOwnerQQ(ctx, b.QQUID) {
 			return true
 		}
 	}
 	return false
 }
 
-func (a *api) isOwnerQQ(qq string) bool {
+func (a *api) isOwnerQQ(ctx context.Context, qq string) bool {
 	qq = strings.TrimSpace(qq)
 	if qq == "" {
 		return false
 	}
 	if qq == a.ControlQQ {
 		return true
+	}
+	// The back-office role table is the authoritative owner list now; the legacy
+	// settings list stays as a fallback so nobody loses access after the upgrade.
+	if a.Store != nil {
+		if r, err := a.Store.GetBotRole(ctx, qq); err == nil && r.Enabled && r.Role == store.RoleOwner {
+			return true
+		}
 	}
 	if a.Settings != nil {
 		for _, o := range a.Settings.Snapshot().OwnerQQs {
@@ -242,6 +249,87 @@ func (a *api) adminSettingsView(snap *settings.Settings) map[string]any {
 		"pdf_font_ready": pdfReady,
 		"docs_enabled":   docsEnabled,
 	}
+}
+
+// --- QQ users / roles ---
+
+func (a *api) adminListBotUsers(w http.ResponseWriter, r *http.Request) {
+	if a.Store == nil {
+		writeError(w, http.StatusServiceUnavailable, "store_unavailable", "数据库未初始化")
+		return
+	}
+	rows, err := a.Store.ListBotRoles(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "store_error", "读取用户列表失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"control_qq": a.ControlQQ,
+		"users":      rows,
+		"roles":      []string{store.RoleOwner, store.RoleAdmin, store.RoleMember, store.RoleGuest},
+	})
+}
+
+func (a *api) adminUpsertBotUser(w http.ResponseWriter, r *http.Request) {
+	if a.Store == nil {
+		writeError(w, http.StatusServiceUnavailable, "store_unavailable", "数据库未初始化")
+		return
+	}
+	var req struct {
+		QQ   string `json:"qq"`
+		Role string `json:"role"`
+		Note string `json:"note"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid json body")
+		return
+	}
+	req.QQ = strings.TrimSpace(req.QQ)
+	req.Role = strings.TrimSpace(req.Role)
+	if !isDigits(req.QQ) {
+		writeError(w, http.StatusBadRequest, "invalid_qq", "QQ 号必须是数字")
+		return
+	}
+	if !store.ValidRole(req.Role) {
+		writeError(w, http.StatusBadRequest, "invalid_role", "角色必须是 owner/admin/member/guest")
+		return
+	}
+	if req.QQ == a.ControlQQ && req.Role != store.RoleOwner {
+		writeError(w, http.StatusConflict, "builtin_owner", "内置主人不能被降级")
+		return
+	}
+	if err := a.Store.UpsertBotRole(r.Context(), req.QQ, req.Role, strings.TrimSpace(req.Note)); err != nil {
+		writeError(w, http.StatusInternalServerError, "store_error", "保存失败")
+		return
+	}
+	a.audit(r, "bot_users.upsert", req.QQ+":"+req.Role)
+	a.adminListBotUsers(w, r)
+}
+
+func (a *api) adminDeleteBotUser(w http.ResponseWriter, r *http.Request) {
+	if a.Store == nil {
+		writeError(w, http.StatusServiceUnavailable, "store_unavailable", "数据库未初始化")
+		return
+	}
+	qq := strings.TrimSpace(r.PathValue("qq"))
+	if qq == "" {
+		writeError(w, http.StatusBadRequest, "invalid_qq", "缺少 QQ 号")
+		return
+	}
+	if qq == a.ControlQQ {
+		writeError(w, http.StatusConflict, "builtin_owner", "内置主人不能被删除")
+		return
+	}
+	if err := a.Store.DeleteBotRole(r.Context(), qq); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "该 QQ 不在用户列表中")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "store_error", "删除失败")
+		return
+	}
+	a.audit(r, "bot_users.delete", qq)
+	a.adminListBotUsers(w, r)
 }
 
 // --- owners ---
