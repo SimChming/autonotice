@@ -120,8 +120,9 @@ func (s *Store) InsertPreference(ctx context.Context, senderQQ, tags, content, s
 	now := time.Now().Unix()
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO memories (session_key, sender_qq, tags, content, kind, scope, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT DO UPDATE SET tags = excluded.tags, created_at = excluded.created_at`,
+			 VALUES (?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(scope, content) WHERE kind = 'preference'
+			 DO UPDATE SET tags = excluded.tags, created_at = excluded.created_at`,
 		sessionKey, strings.TrimSpace(senderQQ), strings.TrimSpace(tags), content,
 		MemoryKindPreference, scope, now)
 	if err != nil {

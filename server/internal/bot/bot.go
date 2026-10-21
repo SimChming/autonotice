@@ -518,11 +518,6 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images
 		final = s.handleDoc(ctx, ev, key, last.Doc, final)
 	}
 
-	if final == "" {
-		final = "🐋 呜…主人的鲸鱼脑有点晕，等下再试喵~"
-	}
-	s.hist.append(key, "assistant", final)
-
 	// Persist whatever the model judged worth remembering long-term. Only the
 	// owner may publish system-level preferences; everyone else's note stays a
 	// per-session fragment.
@@ -539,6 +534,10 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images
 	}
 	final = sanitizeCQ(final, s.capabilities())
 	main, segments := s.replyPlan(ev, final, last)
+	if strings.TrimSpace(main) == "" {
+		main = "🐋 呜…主人的鲸鱼脑有点晕，等下再试喵~"
+	}
+	s.hist.append(key, "assistant", main)
 	if err := s.send(ctx, ev, main); err != nil {
 		return err
 	}
@@ -1073,6 +1072,14 @@ func (s *Service) replyPlan(ev onebot.Event, reply string, last aiReply) (string
 	}
 	if len(planned) > seg.MaxSegments {
 		planned = planned[:seg.MaxSegments]
+	}
+	// The model sometimes leaves reply empty and puts everything in segments;
+	// promote the first text-only segment so the sequence still starts normally.
+	if strings.TrimSpace(reply) == "" && len(planned) > 0 &&
+		strings.TrimSpace(planned[0].Text) != "" &&
+		emptyAPI(planned[0].API) && emptyAction(planned[0].Autonotice) {
+		reply = planned[0].Text
+		planned = planned[1:]
 	}
 	return reply, planned
 }
