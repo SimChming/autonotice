@@ -20,15 +20,17 @@ import (
 const (
 	EventScheduleUpdated = "schedule.updated"
 	EventAlertCreated    = "alert.created"
+	EventAgentAction     = "agent.action"
 )
 
 // Event is the websocket envelope.
 type Event struct {
-	Type     string       `json:"type"`
-	UserID   string       `json:"user_id"`
-	Revision int64        `json:"revision,omitempty"`
-	Alert    *store.Alert `json:"alert,omitempty"`
-	SentAt   time.Time    `json:"sent_at"`
+	Type        string             `json:"type"`
+	UserID      string             `json:"user_id"`
+	Revision    int64              `json:"revision,omitempty"`
+	Alert       *store.Alert       `json:"alert,omitempty"`
+	AgentAction *store.AgentAction `json:"agent_action,omitempty"`
+	SentAt      time.Time          `json:"sent_at"`
 }
 
 // Hub tracks connected websocket clients per user.
@@ -135,6 +137,12 @@ func (h *Hub) PushScheduleUpdate(userID string, revision int64) {
 func (h *Hub) PushAlert(userID string, alert store.Alert) {
 	a := alert
 	h.SendToUser(userID, Event{Type: EventAlertCreated, Alert: &a})
+}
+
+// PushAgentAction delivers an LLM/bot command to the user's live clients.
+func (h *Hub) PushAgentAction(userID string, act store.AgentAction) {
+	a := act
+	h.SendToUser(userID, Event{Type: EventAgentAction, AgentAction: &a})
 }
 
 // ClientCount returns the number of live connections (for /metrics).

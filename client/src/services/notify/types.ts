@@ -71,6 +71,12 @@ export interface PlatformNotify {
   /** 排程（调用方已按 maxCount 截断） */
   schedule(items: NotifyRequest[], options: ScheduleOptions): Promise<ScheduleOutcome>
 
+  /**
+   * 立即触发一条一次性通知（Agent 动作 / QQ 机器人指令）。
+   * 不得影响滚动排程队列，也不受 cancelAllForUser 影响。
+   */
+  fireNow(req: NotifyRequest): Promise<void>
+
   /** App 回到前台时回调（用于滚动重排） */
   onAppResume(cb: () => void): () => void
 

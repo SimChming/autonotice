@@ -9,6 +9,22 @@ export type ItemStatus = 'todo' | 'doing' | 'done' | 'ignored'
 
 export type ItemPriority = 'high' | 'normal' | 'low'
 
+/** 服务端下发给本客户端的 Agent 动作（大模型 / QQ 机器人触发） */
+export interface AgentAction {
+  id: string
+  user_id: string
+  user_qq?: string
+  /** notify.send | client.alarm */
+  action: string
+  title: string
+  body: string
+  /** 动作附加参数：level / vibrate / route / mode ... */
+  payload?: Record<string, unknown>
+  source: string
+  due_at?: string | null
+  created_at: string
+}
+
 export type FetchStatus = 'pending' | 'ok' | 'blocked' | 'unfetchable' | 'failed' | 'too_large'
 
 export type AssetKind = 'file' | 'link' | 'miniapp' | 'wechat_article'

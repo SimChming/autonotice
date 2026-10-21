@@ -7,7 +7,7 @@ import type {
   ScheduleOptions,
   ScheduleOutcome
 } from './types'
-import { ALERT_CHANNEL, APP_MARK } from './types'
+import { ALERT_CHANNEL, APP_MARK, REMINDER_EVENT } from './types'
 
 /**
  * Capacitor (iOS / Android) 实现 —— 真实调用 `@capacitor/local-notifications`。
@@ -192,6 +192,44 @@ export class CapacitorNotifier implements PlatformNotify {
     }
 
     return { scheduled: selected.length, dropped: Math.max(0, items.length - selected.length) }
+  }
+
+  /** 一次性立即提醒：直接发一条本地通知，不进滚动队列 */
+  async fireNow(req: NotifyRequest): Promise<void> {
+    try {
+      await this.init()
+      const notification: any = {
+        id: hashCode(req.id),
+        title: req.title,
+        body: req.body,
+        channelId: ALERT_CHANNEL,
+        extra: {
+          app: APP_MARK,
+          itemId: req.extra.itemId,
+          due_at: req.extra.due_at,
+          alertId: req.extra.alertId,
+          owner: req.extra.owner,
+          route: req.route
+        }
+      }
+      if (req.at > Date.now() + 1000) {
+        notification.schedule = {
+          at: new Date(req.at),
+          allowWhileIdle: Boolean(req.highPriority)
+        }
+      }
+      await this.ln.schedule({ notifications: [notification] })
+      return
+    } catch {
+      // 权限缺失或插件不可用 → 回落到应用内横幅
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent(REMINDER_EVENT, {
+          detail: { title: req.title, body: req.body, route: req.route, highPriority: req.highPriority }
+        })
+      )
+    }
   }
 
   async collectFiredAlerts(): Promise<string[]> {

@@ -134,8 +134,10 @@ export class TauriNotifier implements PlatformNotify {
     return { scheduled: selected.length, dropped: Math.max(0, items.length - selected.length) }
   }
 
-  private async fireNow(r: NotifyRequest): Promise<void> {
+  /** 一次性立即通知：Agent 动作 / QQ 机器人指令直接用这个，不进滚动窗口 */
+  async fireNow(r: NotifyRequest): Promise<void> {
     try {
+      await this.init()
       await this.notif.sendNotification({
         title: r.title,
         body: r.body,

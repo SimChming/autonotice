@@ -91,6 +91,11 @@ export class WebNotifier implements PlatformNotify {
     return { scheduled: sorted.length, dropped: Math.max(0, items.length - sorted.length) }
   }
 
+  /** 一次性立即提醒：不进入滚动队列 */
+  async fireNow(req: NotifyRequest): Promise<void> {
+    this.fire({ ...req, at: Date.now() })
+  }
+
   private startTimers(): void {
     this.stopTimers()
     if (!this.queue.length) return

@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/qqsched/server/internal/agent"
 	"github.com/qqsched/server/internal/contentfetch/docparse"
 	"github.com/qqsched/server/internal/docs"
 	"github.com/qqsched/server/internal/memory"
@@ -75,14 +76,16 @@ type Service struct {
 	mem      *memory.Service
 	settings *settings.Store
 	docs     *docs.Service
+	st       *store.Store
+	agent    *agent.Service
 	log      *slog.Logger
 	hist     *history
 	rate     *limiter
 	seq      atomic.Uint64
 }
 
-// New builds the bot controller. runtime and docSvc may be nil in tests.
-func New(cfg Config, api onebot.APICaller, sh *shellctl.Manager, llm *summarize.Client, mem *memory.Service, runtime *settings.Store, docSvc *docs.Service, log *slog.Logger) *Service {
+// New builds the bot controller. runtime, docSvc, st and agentSvc may be nil in tests.
+func New(cfg Config, api onebot.APICaller, sh *shellctl.Manager, llm *summarize.Client, mem *memory.Service, runtime *settings.Store, docSvc *docs.Service, st *store.Store, agentSvc *agent.Service, log *slog.Logger) *Service {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -95,6 +98,8 @@ func New(cfg Config, api onebot.APICaller, sh *shellctl.Manager, llm *summarize.
 		mem:      mem,
 		settings: runtime,
 		docs:     docSvc,
+		st:       st,
+		agent:    agentSvc,
 		log:      log,
 		hist:     newHistory(2*time.Hour, cfg.HistoryTurns),
 		rate:     newLimiter(),
@@ -361,6 +366,12 @@ type aiAPI struct {
 	Params map[string]any `json:"params"`
 }
 
+// aiAction is a model-emitted Autonotice action call (notify / alarm / schedule).
+type aiAction struct {
+	Action string         `json:"action"`
+	Params map[string]any `json:"params"`
+}
+
 // aiDoc is a model-emitted document request/collection step.
 type aiDoc struct {
 	Action    string         `json:"action"`
@@ -372,12 +383,13 @@ type aiDoc struct {
 }
 
 type aiReply struct {
-	Reply     string    `json:"reply"`
-	Command   *string   `json:"command"`
-	API       *aiAPI    `json:"api"`
-	Memory    *aiMemory `json:"memory"`
-	Followups []string  `json:"followups"`
-	Doc       *aiDoc    `json:"doc"`
+	Reply      string    `json:"reply"`
+	Command    *string   `json:"command"`
+	API        *aiAPI    `json:"api"`
+	Autonotice *aiAction `json:"autonotice"`
+	Memory     *aiMemory `json:"memory"`
+	Followups  []string  `json:"followups"`
+	Doc        *aiDoc    `json:"doc"`
 }
 
 // chat runs the persona conversation. allowShell is false for everyone except
@@ -400,6 +412,7 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images
 	draftBlock := s.draftBlock(ctx, key)
 	sourceText := s.extractSourceText(ctx, ev)
 	capBlock := s.capabilityBlock()
+	agentBlock := s.autonoticeBlock(ctx, ev)
 
 	histText := text
 	if histText == "" && len(images) > 0 {
@@ -410,7 +423,7 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images
 	var last aiReply
 	for i := 0; i < s.cfg.MaxIterations; i++ {
 		callCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		prompt := s.buildPrompt(memBlock, turns, ev, allowShell, draftBlock, sourceText, capBlock)
+		prompt := s.buildPrompt(memBlock, turns, ev, allowShell, draftBlock, sourceText, capBlock, agentBlock)
 		if len(images) > 0 && i == 0 {
 			prompt += "\n【用户刚刚发送了图片，请直接查看图片内容（文字/画面）并据此回答，不要声称自己看不到图片。】"
 		}
@@ -433,6 +446,13 @@ func (s *Service) chat(ctx context.Context, ev onebot.Event, text string, images
 		last = parsed
 		if reply := strings.TrimSpace(parsed.Reply); reply != "" {
 			final = reply
+		}
+		// Autonotice action tool-call: the robot is part of the Autonotice
+		// system and can drive the speaker's own clients (reminders, alarms,
+		// schedules) — never someone else's unless the speaker is the owner.
+		if parsed.Autonotice != nil && strings.TrimSpace(parsed.Autonotice.Action) != "" {
+			turns = s.hist.append(key, "tool", s.runAutonotice(ctx, ev, parsed.Autonotice))
+			continue
 		}
 		// OneBot action tool-call first: the model can drive any NapCat API
 		// (send images, query group info, ...), see the result, and continue.
@@ -684,6 +704,81 @@ func (s *Service) runOnebotAPI(ctx context.Context, call *aiAPI) string {
 	return "接口 " + action + " 返回:\n" + truncateRunes(string(data), 2000)
 }
 
+// autonoticeBlock tells the model whether the current speaker has an
+// Autonotice account, so it can either use the action surface or explain how to
+// bind one — instead of pretending the product does not exist.
+func (s *Service) autonoticeBlock(ctx context.Context, ev onebot.Event) string {
+	var b strings.Builder
+	b.WriteString("【Autonotice 绑定状态】")
+	if s.st == nil {
+		b.WriteString("无法读取绑定信息，autonotice 动作不可用。\n")
+		return b.String()
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	binding, err := s.st.GetVerifiedBindingForQQ(lookupCtx, ev.UserID)
+	if err != nil || binding == nil {
+		b.WriteString("当前 QQ 尚未绑定 Autonotice 账号：autonotice 动作会被系统拒绝。可以正常聊天，并提示对方先在 Autonotice 客户端登录、把 " + ev.UserID + " 绑定为自己的账号后再来。\n")
+	} else {
+		b.WriteString("当前 QQ 已绑定 Autonotice 账号（user_id=" + binding.UserID + "）：autonotice 动作会作用在这个账号自己的提醒/闹钟/日程上。\n")
+	}
+	if s.isOwner(ev.UserID) {
+		b.WriteString("你是主人：可以额外传 target_qq 或 target_user_id 操作其他已绑定账号。\n")
+	} else {
+		b.WriteString("你不是主人：绝对不能在 params 里加 target_qq/target_user_id，只能操作自己绑定的账号；对方要求动别人的账号时必须拒绝。\n")
+	}
+	return b.String()
+}
+
+// runAutonotice executes a model-emitted Autonotice action and formats the
+// result as a tool turn, mirroring runOnebotAPI.
+func (s *Service) runAutonotice(ctx context.Context, ev onebot.Event, call *aiAction) string {
+	action := strings.TrimSpace(call.Action)
+	if action == "" {
+		return "错误: autonotice.action 为空"
+	}
+	if s.agent == nil {
+		return "错误: Autonotice 动作服务未启用"
+	}
+	req := agent.Requester{QQ: ev.UserID, IsOwner: s.isOwner(ev.UserID)}
+	if s.st != nil {
+		lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		if binding, err := s.st.GetVerifiedBindingForQQ(lookupCtx, ev.UserID); err == nil && binding != nil {
+			req.UserID = binding.UserID
+		}
+		cancel()
+	}
+	actCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	res, err := s.agent.Execute(actCtx, req, action, call.Params)
+	if err != nil {
+		switch {
+		case errors.Is(err, agent.ErrForbidden):
+			return "无权限: 当前对话者不是主人，不能指定 target 操作别人的账号，只能操作自己绑定的账号。请直接拒绝对方。"
+		case errors.Is(err, agent.ErrNotBound):
+			return "未绑定: 当前 QQ 还没有绑定 Autonotice 账号，本次操作没有执行。请告诉对方先在 Autonotice 客户端登录并绑定这个 QQ。"
+		case errors.Is(err, agent.ErrTarget):
+			return "目标不存在: 该 QQ 没有绑定任何 Autonotice 账号。"
+		case errors.Is(err, agent.ErrInvalid):
+			return "参数错误: " + truncateRunes(err.Error(), 200)
+		case errors.Is(err, store.ErrNotFound):
+			return "未找到: 该账号下没有对应的日程。"
+		default:
+			return "Autonotice 动作执行失败: " + truncateRunes(err.Error(), 300)
+		}
+	}
+	out := "Autonotice 动作 " + action + " 执行成功"
+	if res.Message != "" {
+		out += "：" + res.Message
+	}
+	if len(res.Data) > 0 {
+		if data, err := json.Marshal(res.Data); err == nil {
+			out += "\n返回数据: " + truncateRunes(string(data), 1500)
+		}
+	}
+	return out
+}
+
 // quotaReply is the canned answer when a private-chat user exhausts their
 // DeepSeek budget — playful, zero model tokens.
 func (s *Service) quotaReply() string {
@@ -710,7 +805,7 @@ func toolTurn(cmd, out string, code int, err error) string {
 	return b.String()
 }
 
-func (s *Service) buildPrompt(memBlock string, turns []turn, ev onebot.Event, allowShell bool, draftBlock, sourceText, capBlock string) string {
+func (s *Service) buildPrompt(memBlock string, turns []turn, ev onebot.Event, allowShell bool, draftBlock, sourceText, capBlock, agentBlock string) string {
 	var b strings.Builder
 	// Tell the model exactly who it is talking to: in a group session the
 	// history mixes master and classmates, so an explicit identity line is the
@@ -735,6 +830,9 @@ func (s *Service) buildPrompt(memBlock string, turns []turn, ev onebot.Event, al
 	}
 	if capBlock != "" {
 		b.WriteString(capBlock)
+	}
+	if agentBlock != "" {
+		b.WriteString(agentBlock)
 	}
 	b.WriteString("以下是最近的对话记录（按时间顺序，最早的在前）：\n")
 	if len(turns) == 0 {

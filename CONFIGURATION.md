@@ -143,7 +143,48 @@ curl -s -X POST http://127.0.0.1:8080/api/v1/admin/settings/test-llm \
 
 ---
 
-## 5. 编译与部署（服务器上）
+## 5. Autonotice Agent API（任意大模型可直接调用）
+
+QQ 机器人、App/网页，以及**任意第三方大模型**都能通过这套接口驱动某个 Autonotice 账号的客户端（发提醒、震动闹钟、增删改日程）。鉴权用普通用户 JWT（`Authorization: Bearer <user token>`），与 App 登录态一致。
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| GET | `/api/v1/agent/catalog` | 动作清单（机器可读，便于大模型做 tool discovery） |
+| POST | `/api/v1/agent/actions` | 执行一个动作，body: `{"action":"notify.send","params":{...}}` |
+| GET | `/api/v1/me/actions` | 本账号待执行的客户端动作（客户端 15s 轮询） |
+| POST | `/api/v1/me/actions/{id}/ack` | 客户端执行完回执，避免重复提醒 |
+
+动作清单：
+
+- `account.whoami`：返回 user_id / 已绑定 QQ / 是否主人。
+- `notify.send` `{title, body, level(info|important|urgent), at(RFC3339，可空), vibrate(bool), route}`：推送到该账号客户端，弹系统通知/应用内横幅。
+- `client.alarm` `{title, body, mode(vibrate|ring|both)}`：让客户端立即震动/响铃（叫醒、强提醒）。
+- `schedule.list` `{limit}`、`schedule.create` `{title, type, priority, due_at, remind_at, notes, all_day}`、`schedule.update` `{id, ...}`、`schedule.delete` `{id}`。
+
+权限（硬规则，服务端强制执行，不依赖模型自觉）：
+
+- 普通账号只能操作**自己**：params 里传 `target_qq` / `target_user_id` 一律 403 `forbidden`。
+- 主人账号（`CONTROL_QQ` 与后台主人白名单）可传 `target_qq`（该 QQ 必须已验证绑定）或 `target_user_id` 操作他人。
+- QQ 侧：机器人先按发送者 QQ 反查已验证绑定；未绑定任何账号的用户只能聊天，动作请求会被拒绝并提示先绑定。主人不受此限制（但仍不能操作未绑定 QQ）。
+- 动作只落库 + WS 推送，真正的弹窗/震动由客户端轮询执行；客户端离线时下次上线补执行，执行后 ack。
+
+示例：
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/v1/agent/actions \
+  -H "Authorization: Bearer $USER_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"action":"notify.send","params":{"title":"该交作业啦","body":"今晚 23:59 截止","level":"urgent","vibrate":true}}'
+```
+
+QQ 机器人侧（模型输出字段）：
+
+```json
+{"autonotice": {"action": "client.alarm", "params": {"title": "起床啦", "body": "早八要迟到了", "mode": "both"}}}
+```
+
+---
+
+## 6. 编译与部署（服务器上）
 
 内存只有 1.7G，**严禁并行编译**，必须先加内存限制：
 
@@ -163,7 +204,7 @@ sleep 2 && curl -s http://127.0.0.1:8080/healthz
 
 ---
 
-## 6. 常见故障速查
+## 7. 常见故障速查
 
 | 现象 | 原因 / 处理 |
 | --- | --- |
@@ -174,12 +215,16 @@ sleep 2 && curl -s http://127.0.0.1:8080/healthz
 | 客户端提示网络不可用 | CORS / 明文流量 / API_BASE 同源配置问题，见 HANDOFF.md |
 | 后台设置保存后旧值还在 | `api_key` 掩码含 `*` 被忽略，属于预期行为 |
 | 自主补发不生效 | `auto_segment.enabled=false`，或发送者不在 `targets` 里 |
+| QQ 里让机器人设提醒没反应 | 该 QQ 未绑定 Autonotice 账号；先在客户端登录并绑定，再让机器人操作 |
+| Agent 动作成功但手机没弹 | 客户端未打开/未授权通知；动作在队列里，客户端上线轮询后会补发并 ack |
+| Agent 调 `target_qq` 返回 403 | 调用者不是主人；普通账号只能操作自己 |
 
 ---
 
-## 7. 变更记录（两边都往这里追加）
+## 8. 变更记录（两边都往这里追加）
 
 格式：`- YYYY-MM-DD 谁（主人 / 鲸鱼娘）改了什么，为什么`
 
 - 2026-10-21 主人：初版。整理配置优先级、后台 API、模型清单、编译部署与故障速查。
 - 2026-10-21 主人：`auto_segment` 默认开启（targets=`owner`，1.2–2.6s，最多 3 段），并要求模型优先「一次问完所有缺失信息、先结论后补充」。
+- 2026-10-21 主人：新增 Autonotice Agent API（`/agent/catalog`、`/agent/actions`、`/me/actions`、ack），QQ 机器人新增 `autonotice` 工具字段并明确自己是 Autonotice 的一部分；普通账号只能操作自己绑定的账号，主人可指定 target。

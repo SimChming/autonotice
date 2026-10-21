@@ -8,6 +8,7 @@ import type {
   AdminSettings,
   AdminStatus,
   AdminUser,
+  AgentAction,
   Alert,
   ApiErrorShape,
   AuthResult,
@@ -386,6 +387,19 @@ export const api = {
 
   /** 当前账号是否为服务器主人（已绑定主人 QQ） */
   myPrivileges: () => request<{ is_owner: boolean; control_qq: string }>('/me/privileges'),
+
+  // -------------------------------------------------------------------------
+  // Agent 动作（大模型 / QQ 机器人 → 本客户端）
+  // -------------------------------------------------------------------------
+
+  /** 未执行的 Agent 动作（提醒 / 闹钟），客户端轮询后执行并 ack */
+  listAgentActions: (since?: string) =>
+    request<{ actions: AgentAction[] }>(
+      `/me/actions${since ? `?since=${encodeURIComponent(since)}` : ''}`
+    ),
+
+  ackAgentAction: (id: string) =>
+    request<void>(`/me/actions/${encodeURIComponent(id)}/ack`, { method: 'POST', body: {} }),
 
   /** 主人免密换取后台 token（服务端校验已绑定主人 QQ） */
   ownerSSO: () =>

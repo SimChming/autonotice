@@ -6,6 +6,7 @@ import { InAppReminder } from './components/InAppReminder'
 import { DesktopLayout } from './components/DesktopLayout'
 import { NAVIGATE_EVENT } from './services/notify/types'
 import { reschedule, startScheduler } from './services/notify/scheduler'
+import { pollAgentActions } from './services/agent-actions'
 import { syncAll } from './services/sync'
 import { loadCredentials, silentRelogin, useAuthStore } from './store/auth'
 import { useNotifyStore } from './store/notify'
@@ -17,6 +18,9 @@ let listenersBound = false
 
 /** 前台自动轮询间隔：1 分钟（走增量，代价很小；回到前台另有 useDidShow 兜底） */
 const AUTO_SYNC_MS = 60_000
+
+/** Agent 动作轮询间隔：15 秒（大模型/QQ 机器人的提醒要尽快落到本机） */
+const AGENT_POLL_MS = 15_000
 
 /** 全局事件：系统通知被点击 → 跳转对应页面（hash 路由） */
 function bindGlobalListeners() {
@@ -37,6 +41,7 @@ function bindGlobalListeners() {
     if (document.visibilityState === 'visible' && useAuthStore.getState().token) {
       void syncAll()
       void reschedule({ force: true }).catch(() => undefined)
+      void pollAgentActions()
     }
   })
 }
@@ -56,6 +61,7 @@ async function bootstrap() {
   // 启动时：先同步（离线也有本地缓存可读），再做滚动重排
   await syncAll()
   await startScheduler({ request: false })
+  await pollAgentActions().catch(() => undefined)
 }
 
 function App({ children }: PropsWithChildren) {
@@ -72,6 +78,7 @@ function App({ children }: PropsWithChildren) {
     if (!useAuthStore.getState().token) return
     void syncAll()
     void reschedule({ force: true }).catch(() => undefined)
+    void pollAgentActions()
   })
 
   useEffect(() => {
@@ -86,6 +93,15 @@ function App({ children }: PropsWithChildren) {
         .catch(() => undefined)
     }, AUTO_SYNC_MS)
 
+    return () => clearInterval(timer)
+  }, [])
+
+  // Agent 动作单独用更短的轮询：提醒/闹钟要尽快响，代价只是一次空列表查询
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      void pollAgentActions()
+    }, AGENT_POLL_MS)
     return () => clearInterval(timer)
   }, [])
 

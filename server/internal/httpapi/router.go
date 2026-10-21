@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/qqsched/server/internal/admin"
+	"github.com/qqsched/server/internal/agent"
 	"github.com/qqsched/server/internal/auth"
 	"github.com/qqsched/server/internal/docs"
 	"github.com/qqsched/server/internal/notify"
@@ -40,6 +41,9 @@ type Deps struct {
 	LLM       *summarize.Client
 	OneBot    onebot.APICaller
 	ControlQQ string
+
+	// Agent action surface (LLM / QQ bot → client reminders).
+	Agent *agent.Service
 
 	BasePath      string
 	OneBotPath    string
@@ -128,6 +132,13 @@ func NewRouter(d Deps) http.Handler {
 	// Who am I: tells the client whether this account is the server owner,
 	// so the back-office entry is only shown to the master.
 	mux.Handle("GET "+base+"/me/privileges", a.secure(http.HandlerFunc(a.myPrivileges)))
+
+	// Agent action surface: any LLM / the QQ bot can drive this account's
+	// clients (in-app reminders, alarms) and schedules.
+	mux.Handle("GET "+base+"/agent/catalog", a.secure(http.HandlerFunc(a.agentCatalog)))
+	mux.Handle("POST "+base+"/agent/actions", a.secure(http.HandlerFunc(a.agentExecute)))
+	mux.Handle("GET "+base+"/me/actions", a.secure(http.HandlerFunc(a.listMyAgentActions)))
+	mux.Handle("POST "+base+"/me/actions/{id}/ack", a.secure(http.HandlerFunc(a.ackMyAgentAction)))
 
 	// Feedback / Contact Us (authenticated, simple freeform submission).
 	mux.Handle("POST "+base+"/feedback", a.secure(http.HandlerFunc(a.createFeedback)))
