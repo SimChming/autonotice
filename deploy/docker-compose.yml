@@ -22,4 +22,5 @@ services:
       - "6099:6099"
     volumes:
       - "./napcat:/app/napcat"
+      - "./napcat/qq:/app/.config/QQ"
     mem_limit: 768m

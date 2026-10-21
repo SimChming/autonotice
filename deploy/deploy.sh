@@ -5,7 +5,7 @@ set -eu
 cd "$(dirname "$0")"
 
 echo "[1/3] 拉取最新镜像"
-docker compose pull
+timeout 600 docker compose pull server
 
 echo "[2/3] 启动服务"
 docker compose up -d
