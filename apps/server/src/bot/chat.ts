@@ -15,8 +15,8 @@ import { runShell } from "./shell.js";
 import { buildInstructionPrompt, buildSkillsPrompt, getActivePersona, getEnabledSkills, getSetting } from "../skills/registry.js";
 import { executeSkill, SkillDeniedError } from "../skills/handlers.js";
 
-const MAX_ROUNDS = 5;
-const MAX_SENDS_PER_TURN = 3;
+const MAX_ROUNDS = 8;
+const MAX_SENDS_PER_TURN = 6;
 const RATE_WINDOW_MS = 5 * 60 * 1000;
 const RATE_LIMIT = 3;
 
@@ -84,6 +84,20 @@ function isOwner(qq: string): boolean {
 /** 去重用的归一化：忽略空白与常见标点，避免「同一句话换个标点」重复发送。 */
 function normalizeText(text: string): string {
   return text.replace(/\s+/g, "").replace(/[，。！？、,.!?~～…:：;；"'“”‘’]/g, "");
+}
+
+/**
+ * 工具轮里的占位句（「稍等」「我去查查」之类）不应该单独发出去：
+ * 模型经常每轮都先寒暄一句，导致固定的「一条提问 → 三条回复」。
+ */
+function isFillerReply(text: string): boolean {
+  const compact = text.replace(/\s+/g, "");
+  if (compact.length > 40) {
+    return false;
+  }
+  return /(稍等|等一下|等会儿|马上|我看看|我看下|我去看看|我去查|让我看看|让我查|先查|查一下|翻翻)/.test(
+    compact,
+  );
 }
 
 function assertNoTarget(params: Record<string, unknown>, owner: boolean): string | null {
@@ -201,7 +215,13 @@ export class BotChat {
     const sent = new Set<string>();
     for (const entry of history) {
       if (entry.role === "assistant") {
-        sent.add(normalizeText(entry.text));
+        // 历史里一次回复可能包含多条消息，按行拆分后才能逐条去重。
+        for (const line of entry.text.split("\n")) {
+          const key = normalizeText(line);
+          if (key) {
+            sent.add(key);
+          }
+        }
       }
     }
     const outgoing: string[] = [];
@@ -217,7 +237,6 @@ export class BotChat {
     };
 
     let memory: BotContract["memory"] = null;
-    let nudged = false;
 
     for (let round = 0; round < MAX_ROUNDS; round += 1) {
       let contract: BotContract | null = null;
@@ -246,7 +265,9 @@ export class BotChat {
       }
       const sendsBefore = outgoing.length;
       const replyText = contract.reply.trim();
-      if (replyText) {
+      const hasAction = Boolean(contract.command || contract.api || contract.autonotice || contract.skill);
+      // 有工具调用时跳过「稍等/我去查」占位句，避免每条任务都固定多出一条废话。
+      if (replyText && !(hasAction && isFillerReply(replyText))) {
         await sendOnce(replyText);
       }
       if (outgoing.length > sendsBefore) {
@@ -311,12 +332,12 @@ export class BotChat {
         continue;
       }
 
-      if (contract.continue && !nudged && outgoing.length > sendsBefore) {
-        nudged = true;
+      // 是否继续完全由模型决定：有新增内容才继续，说完就停，不再强制凑第二条。
+      if (contract.continue && outgoing.length > sendsBefore) {
         messages.push({
           role: "user",
           content:
-            "系统会再次调用一次 API。只输出新增的实质内容，并把刚才已经发过的话当作上下文，禁止重复；完成后把 continue 设为 false。",
+            "（继续）只输出新增的实质内容；已经说过的话不要再重复。如果已经说完，reply 留空并把 continue 设为 false。",
         });
         continue;
       }

@@ -633,4 +633,6 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-22 v2.2.7 管理入口：用户端 Web/桌面/手机在检测到管理员 token 后显示「管理」选项卡，进入 `/admin` 管理控制台；登录页保留「管理员入口」。
 - 2026-10-22 v2.2.7 开机自启：新增 `deploy/autonotice.service`（systemd oneshot，`docker compose up -d`），已在服务器 `enable --now`，Docker/containerd 均为 enabled，重启后整套 Autonotice + NapCat 自动拉起。
 - 2026-10-22 v2.2.7 热修：`@fastify/http-proxy` 的 `websocket` 选项会接管全局 upgrade 事件，与 `@fastify/websocket` 的 `/api/v1/ws` 冲突并触发 `ERR_HTTP_SOCKET_ASSIGNED` 导致服务重启；已关闭该选项（NapCat 面板走 HTTP 反代即可），线上已回归验证客户端 WS 正常且进程稳定。
+- 2026-10-22 v2.3.7 对话轮次灵活化：移除「一条提问固定三条回复」的结构性来源——工具轮里的占位句（稍等/我去查查等，≤40 字）不再单独发送；`continue` 不再只允许一次，由模型自行决定是否继续，上限放宽为 8 轮 / 6 条；历史去重按行拆分；prompt 明确「条数由任务决定，一句话能说完就只发一条，说完立即 continue=false」。
+- 2026-10-22 v2.3.7 主人语气：对主人更热情、更主动（多关心一句、多给有用信息）；主人要求「别啰嗦/简短/直接说」时立即收敛，但保持积极不冷淡。版本号统一提升到 2.3.7。
 
