@@ -3,6 +3,9 @@ import {
   authResponseSchema,
   bindConfirmResponseSchema,
   bindStartResponseSchema,
+  bindStatusResponseSchema,
+  bindGroupResponseSchema,
+  groupListResponseSchema,
   scheduleItemSchema,
   scheduleListResponseSchema,
   type AlertItem,
@@ -11,7 +14,9 @@ import {
   type BindConfirmResponse,
   type BindStartRequest,
   type BindStartResponse,
+  type BindStatusResponse,
   type CreateScheduleRequest,
+  type GroupItem,
   type LoginRequest,
   type RegisterRequest,
   type ScheduleItem,
@@ -172,6 +177,26 @@ export const api = {
 
   confirmBind(input: BindConfirmRequest): Promise<BindConfirmResponse> {
     return request("/bind/confirm", bindConfirmResponseSchema, { method: "POST", body: input });
+  },
+
+  bindStatus(): Promise<BindStatusResponse> {
+    return request("/bind/status", bindStatusResponseSchema);
+  },
+
+  listGroups(): Promise<{ items: GroupItem[] }> {
+    return request("/groups", groupListResponseSchema);
+  },
+
+  async bindGroup(groupId: string): Promise<GroupItem> {
+    const response = await request("/groups/bind", bindGroupResponseSchema, {
+      method: "POST",
+      body: { groupId },
+    });
+    return response.group;
+  },
+
+  async unbindGroup(groupId: string): Promise<void> {
+    await rawRequest(`/groups/${encodeURIComponent(groupId)}`, { method: "DELETE" });
   },
 
   listSchedules(): Promise<{ items: ScheduleItem[] }> {

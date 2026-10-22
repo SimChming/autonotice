@@ -36,3 +36,12 @@ export const bindConfirmResponseSchema = z.object({
 });
 
 export type BindConfirmResponse = z.infer<typeof bindConfirmResponseSchema>;
+
+/** 绑定状态查询：群内自动确认会消费绑定码，客户端据此刷新状态而不是误报失效。 */
+export const bindStatusResponseSchema = z.object({
+  bound: z.boolean(),
+  qq: z.string().optional(),
+  verifiedAt: z.string().optional(),
+});
+
+export type BindStatusResponse = z.infer<typeof bindStatusResponseSchema>;

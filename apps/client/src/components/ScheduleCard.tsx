@@ -60,7 +60,11 @@ export function ScheduleCard({ item, busy = false, onToggle, onDelete }: Schedul
         {item.notes ? <p className="schedule-notes">{item.notes}</p> : null}
 
         <div className="schedule-foot">
-          <GroupChip groupId={item.groupId} />
+          <GroupChip
+            groupId={item.groupId}
+            groupName={item.groupName}
+            groupAvatar={item.groupAvatar}
+          />
           {overdue ? <span className="overdue-flag">已逾期</span> : null}
         </div>
       </div>

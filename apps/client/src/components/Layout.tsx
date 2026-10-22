@@ -4,13 +4,14 @@ import { useAuthStore } from "../stores/auth";
 import { useScheduleStore } from "../stores/schedule";
 import { buildAlertSocketUrl, UNAUTHORIZED_EVENT } from "../services/api";
 import { useLayoutMode } from "../hooks/useLayoutMode";
-import { BellIcon, CalendarIcon, LinkIcon, UserIcon, WhaleMark } from "./Icons";
+import { BellIcon, CalendarIcon, GroupsIcon, LinkIcon, UserIcon, WhaleMark } from "./Icons";
 import { TabBar, type NavItem } from "./TabBar";
 import { ToastHost, type ToastMessage } from "./Toast";
 
 const NAV_ITEMS: NavItem[] = [
   { to: "/schedule", label: "日程", icon: <CalendarIcon /> },
   { to: "/alerts", label: "提醒", icon: <BellIcon /> },
+  { to: "/groups", label: "群聊", icon: <GroupsIcon /> },
   { to: "/bind", label: "绑定", icon: <LinkIcon /> },
   { to: "/settings", label: "我的", icon: <UserIcon /> },
 ];

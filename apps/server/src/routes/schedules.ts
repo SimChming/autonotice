@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { and, desc, eq, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, isNull, lte } from "drizzle-orm";
 import {
   alertListResponseSchema,
   createScheduleRequestSchema,
@@ -9,7 +9,7 @@ import {
   type ScheduleItem,
 } from "@autonotice/shared";
 import type { Db } from "../db/client.js";
-import { alerts, scheduleItems } from "../db/schema.js";
+import { alerts, groups, scheduleItems } from "../db/schema.js";
 import { fail, requireUser } from "../auth/guard.js";
 
 interface ScheduleRouteOptions {
@@ -17,8 +17,12 @@ interface ScheduleRouteOptions {
 }
 
 type ScheduleRow = typeof scheduleItems.$inferSelect;
+interface GroupInfo {
+  name: string | null;
+  avatar: string | null;
+}
 
-function toItem(row: ScheduleRow): ScheduleItem {
+function toItem(row: ScheduleRow, group?: GroupInfo): ScheduleItem {
   return scheduleItemSchema.parse({
     id: row.id,
     title: row.title,
@@ -29,9 +33,19 @@ function toItem(row: ScheduleRow): ScheduleItem {
     remindAt: row.remindAt === null ? null : new Date(row.remindAt).toISOString(),
     notes: row.notes,
     groupId: row.groupId,
+    groupName: group?.name ?? null,
+    groupAvatar: group?.avatar ?? null,
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
   });
+}
+
+function groupInfoFor(db: Db, groupId: string | null): GroupInfo | undefined {
+  if (!groupId) {
+    return undefined;
+  }
+  const row = db.select().from(groups).where(eq(groups.groupId, groupId)).get();
+  return row ? { name: row.name || null, avatar: row.avatar || null } : undefined;
 }
 
 function refreshAlert(db: Db, userId: number, scheduleId: number, at: number | null, title: string, notes: string) {
@@ -49,12 +63,24 @@ export function registerScheduleRoutes(app: FastifyInstance, { db }: ScheduleRou
       return;
     }
     const rows = db
-      .select()
+      .select({
+        ...getTableColumns(scheduleItems),
+        groupName: groups.name,
+        groupAvatar: groups.avatar,
+      })
       .from(scheduleItems)
+      .leftJoin(groups, eq(groups.groupId, scheduleItems.groupId))
       .where(eq(scheduleItems.userId, claims.sub))
       .orderBy(scheduleItems.dueAt, desc(scheduleItems.createdAt))
       .all();
-    return scheduleListResponseSchema.parse({ items: rows.map(toItem) });
+    return scheduleListResponseSchema.parse({
+      items: rows.map((row) =>
+        toItem(row, {
+          name: row.groupName || null,
+          avatar: row.groupAvatar || null,
+        }),
+      ),
+    });
   });
 
   app.post("/api/v1/schedules", async (request, reply) => {
@@ -94,7 +120,7 @@ export function registerScheduleRoutes(app: FastifyInstance, { db }: ScheduleRou
       .get();
 
     refreshAlert(db, claims.sub, row.id, remindAt ?? dueAt, row.title, row.notes);
-    return reply.code(201).send(toItem(row));
+    return reply.code(201).send(toItem(row, groupInfoFor(db, row.groupId)));
   });
 
   app.patch("/api/v1/schedules/:id", async (request, reply) => {
@@ -152,7 +178,7 @@ export function registerScheduleRoutes(app: FastifyInstance, { db }: ScheduleRou
       .get();
 
     refreshAlert(db, claims.sub, id, remindAt ?? dueAt, row.title, row.notes);
-    return toItem(row);
+    return toItem(row, groupInfoFor(db, row.groupId));
   });
 
   app.delete("/api/v1/schedules/:id", async (request, reply) => {

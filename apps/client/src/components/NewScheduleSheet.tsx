@@ -1,6 +1,7 @@
-import { useId, useState, type FormEvent } from "react";
-import type { SchedulePriority, ScheduleType } from "@autonotice/shared";
+import { useEffect, useId, useState, type FormEvent } from "react";
+import type { GroupItem, SchedulePriority, ScheduleType } from "@autonotice/shared";
 import { useScheduleStore } from "../stores/schedule";
+import { api } from "../services/api";
 import { fromDatetimeLocal } from "../utils/date";
 import {
   SCHEDULE_PRIORITY_OPTIONS,
@@ -21,8 +22,17 @@ export function NewScheduleSheet({ onClose }: NewScheduleSheetProps) {
   const [priority, setPriority] = useState<SchedulePriority>("normal");
   const [dueAt, setDueAt] = useState("");
   const [notes, setNotes] = useState("");
+  const [groups, setGroups] = useState<GroupItem[]>([]);
+  const [groupId, setGroupId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api
+      .listGroups()
+      .then(({ items }) => setGroups(items))
+      .catch(() => undefined);
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -54,6 +64,7 @@ export function NewScheduleSheet({ onClose }: NewScheduleSheetProps) {
         priority,
         dueAt: dueIso,
         notes: notes.trim(),
+        groupId: groupId || null,
       });
       onClose();
     } catch (submitError) {
@@ -134,6 +145,24 @@ export function NewScheduleSheet({ onClose }: NewScheduleSheetProps) {
             placeholder="补充地点、提交方式或任何不想忘记的细节"
           />
         </div>
+
+        {groups.length > 0 ? (
+          <div className="field">
+            <label htmlFor={`${fieldId}-group`}>来源群聊</label>
+            <select
+              id={`${fieldId}-group`}
+              value={groupId}
+              onChange={(event) => setGroupId(event.target.value)}
+            >
+              <option value="">手动创建（不关联群聊）</option>
+              {groups.map((group) => (
+                <option key={group.groupId} value={group.groupId}>
+                  {group.name || `群 ${group.groupId}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
         {error ? (
           <p className="form-error" role="alert">

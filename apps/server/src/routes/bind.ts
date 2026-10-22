@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { bindConfirmRequestSchema, bindConfirmResponseSchema, bindStartRequestSchema, bindStartResponseSchema } from "@autonotice/shared";
+import { bindConfirmRequestSchema, bindConfirmResponseSchema, bindStartRequestSchema, bindStartResponseSchema, bindStatusResponseSchema } from "@autonotice/shared";
 import type { Db } from "../db/client.js";
 import type { Config } from "../config.js";
 import { fail, requireUser } from "../auth/guard.js";
-import { confirmBind, startBind } from "../services/bind.js";
+import { confirmBind, getUserBinding, startBind } from "../services/bind.js";
+import { linkUserGroup } from "../services/groups.js";
 
 interface BindRouteOptions {
   db: Db;
@@ -36,6 +37,22 @@ export function registerBindRoutes(app: FastifyInstance, { db, config }: BindRou
     });
   });
 
+  app.get("/api/v1/bind/status", async (request, reply) => {
+    const claims = await requireUser(request, reply);
+    if (!claims) {
+      return;
+    }
+    const binding = getUserBinding(db, claims.sub);
+    if (!binding) {
+      return bindStatusResponseSchema.parse({ bound: false });
+    }
+    return bindStatusResponseSchema.parse({
+      bound: true,
+      qq: binding.qq,
+      verifiedAt: new Date(binding.verifiedAt).toISOString(),
+    });
+  });
+
   app.post("/api/v1/bind/confirm", async (request, reply) => {
     const claims = await requireUser(request, reply);
     if (!claims) {
@@ -51,6 +68,9 @@ export function registerBindRoutes(app: FastifyInstance, { db, config }: BindRou
     if (!bound) {
       return fail(reply, 400, "invalid_code", "绑定码无效或已过期");
     }
+
+    // 绑定 QQ 的同时把主群加入该用户的群聊列表（多群聊管理的第一条）。
+    linkUserGroup(db, claims.sub, config.bind.groupId);
 
     return bindConfirmResponseSchema.parse({
       qq: bound.qq,

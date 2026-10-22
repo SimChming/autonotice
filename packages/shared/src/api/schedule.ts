@@ -20,6 +20,10 @@ export const scheduleItemSchema = z.object({
   remindAt: z.string().nullable(),
   notes: z.string(),
   groupId: z.string().nullable(),
+  /** 来源群名称（服务端联表 groups 填充）；群名未知时为 null。 */
+  groupName: z.string().nullable().optional(),
+  /** 来源群头像 URL。 */
+  groupAvatar: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import type { BindStartResponse } from "@autonotice/shared";
 import { useAuthStore } from "../stores/auth";
@@ -22,6 +22,35 @@ export function BindPage() {
 
   const showBoundCard = bound !== null && !rebinding;
   const currentStep = showBoundCard ? 3 : ticket ? 2 : 1;
+
+  // 群内发码会先自动确认并消费绑定码；轮询状态，避免网页再点确认时误报「绑定码失效」。
+  useEffect(() => {
+    if (!ticket) {
+      return;
+    }
+    let stopped = false;
+    const timer = window.setInterval(() => {
+      void api
+        .bindStatus()
+        .then((status) => {
+          if (stopped || !status.bound || !status.qq || !status.verifiedAt) {
+            return;
+          }
+          stopped = true;
+          window.clearInterval(timer);
+          setBound({ qq: status.qq, verifiedAt: status.verifiedAt });
+          setTicket(null);
+          setRebinding(false);
+          setJustBound(true);
+          setError(null);
+        })
+        .catch(() => undefined);
+    }, 3000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [ticket, setBound]);
 
   const handleStart = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

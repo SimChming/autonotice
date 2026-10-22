@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
  * 全量 schema（§5）。Phase 3 只使用 users/bindings/bind_codes/groups/messages，
@@ -36,6 +36,22 @@ export const groups = sqliteTable("groups", {
   avatar: text("avatar").notNull().default(""),
   updatedAt: integer("updated_at").notNull(),
 });
+
+/** 用户绑定的群聊（一个用户可绑定多个群，日程按群记录来源）。 */
+export const userGroups = sqliteTable(
+  "user_groups",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    groupId: text("group_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => ({
+    userGroupUnique: uniqueIndex("user_groups_user_group_idx").on(table.userId, table.groupId),
+  }),
+);
 
 export const messages = sqliteTable("messages", {
   id: integer("id").primaryKey({ autoIncrement: true }),

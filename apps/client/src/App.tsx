@@ -3,6 +3,7 @@ import { BrowserRouter, HashRouter, Navigate, Route, Routes } from "react-router
 import { Layout } from "./components/Layout";
 import { AlertsPage } from "./pages/Alerts";
 import { BindPage } from "./pages/Bind";
+import { GroupsPage } from "./pages/Groups";
 import { LoginPage } from "./pages/Login";
 import { SchedulePage } from "./pages/Schedule";
 import { SettingsPage } from "./pages/Settings";
@@ -65,6 +66,7 @@ export function App() {
           <Route path="schedule" element={<SchedulePage />} />
           <Route path="alerts" element={<AlertsPage />} />
           <Route path="bind" element={<BindPage />} />
+          <Route path="groups" element={<GroupsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
         {/* 管理后台：独立管理员 token，不挂载用户端 Layout，也不受用户登录状态影响。 */}

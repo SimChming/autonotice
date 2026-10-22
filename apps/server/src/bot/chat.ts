@@ -4,7 +4,7 @@ import { z } from "zod";
 import { OWNER_QQ } from "@autonotice/shared";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
-import { alerts, bindings, scheduleItems } from "../db/schema.js";
+import { alerts, bindings, groups, scheduleItems } from "../db/schema.js";
 import type { LlmClient, LlmMessage } from "../llm/client.js";
 import type { NotifyHub } from "../notify/hub.js";
 import type { OneBotClient } from "../onebot/client.js";
@@ -349,7 +349,22 @@ export class BotChat {
           .where(and(eq(scheduleItems.userId, userId), eq(scheduleItems.status, "pending")))
           .limit(limit)
           .all();
-        return `[命令结果] ${JSON.stringify(rows.map((row) => ({ id: row.id, title: row.title, due_at: row.dueAt })))}`;
+        const groupNames = new Map(
+          db
+            .select({ groupId: groups.groupId, name: groups.name })
+            .from(groups)
+            .all()
+            .map((row) => [row.groupId, row.name]),
+        );
+        return `[命令结果] ${JSON.stringify(
+          rows.map((row) => ({
+            id: row.id,
+            title: row.title,
+            due_at: row.dueAt,
+            group_id: row.groupId,
+            group_name: row.groupId ? groupNames.get(row.groupId) || null : null,
+          })),
+        )}`;
       }
 
       case "schedule.create": {

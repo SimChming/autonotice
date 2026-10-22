@@ -24,7 +24,7 @@ export function startBind(db: Db, userId: number, qq: string, ttlSeconds: number
   db.delete(bindCodes).where(eq(bindCodes.userId, userId)).run();
 
   let code = generateCode();
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 10; i += 1) {
     const clash = db.select().from(bindCodes).where(eq(bindCodes.code, code)).get();
     if (!clash) {
       break;
@@ -37,13 +37,19 @@ export function startBind(db: Db, userId: number, qq: string, ttlSeconds: number
 }
 
 export interface ConfirmBindResult {
+  userId: number;
   qq: string;
   verifiedAt: number;
 }
 
+export function getUserBinding(db: Db, userId: number) {
+  return db.select().from(bindings).where(eq(bindings.userId, userId)).get();
+}
+
 /**
  * 完成绑定：同一账号只保留一条绑定，换绑时先删旧记录。
- * 找不到 / 过期 / QQ 已被他人占用时返回 null。
+ * 群内发码会先自动确认并消费绑定码；此时网页再确认应幂等返回已有绑定，
+ * 而不是误报「绑定码无效或已过期」。
  */
 export function confirmBind(db: Db, userId: number, code: string): ConfirmBindResult | null {
   const row = db
@@ -54,7 +60,10 @@ export function confirmBind(db: Db, userId: number, code: string): ConfirmBindRe
     )
     .get();
   if (!row) {
-    return null;
+    const existing = getUserBinding(db, userId);
+    return existing
+      ? { userId, qq: existing.qq, verifiedAt: existing.verifiedAt }
+      : null;
   }
 
   const occupied = db.select().from(bindings).where(eq(bindings.qq, row.qq)).get();
@@ -70,7 +79,7 @@ export function confirmBind(db: Db, userId: number, code: string): ConfirmBindRe
     .run();
   db.delete(bindCodes).where(eq(bindCodes.code, code)).run();
 
-  return { qq: row.qq, verifiedAt };
+  return { userId, qq: row.qq, verifiedAt };
 }
 
 /** 群消息触发：大号发送 6 位码即自动完成绑定，无需网页再点确认。 */

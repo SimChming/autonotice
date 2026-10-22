@@ -11,6 +11,10 @@ export interface IngestDeps {
   onAtBot: (message: NormalizedMessage) => Promise<void> | void;
   onBoundUserMessage?: (userId: number, message: NormalizedMessage, msgId: number) => void;
   onGroupMessageEvent?: (sessionKey: string, text: string) => void;
+  /** 新群/群信息缺失时补全群名称。 */
+  onGroupSeen?: (groupId: string) => void;
+  /** 群内绑定码确认成功后，把该群加入用户的群聊列表。 */
+  onBindConfirmed?: (userId: number, groupId: string) => void;
   logger: FastifyBaseLogger;
 }
 
@@ -27,6 +31,9 @@ export async function ingestMessage(deps: IngestDeps, message: NormalizedMessage
     db.insert(groups).values({ groupId: message.groupId, updatedAt: now }).run();
   } else {
     db.update(groups).set({ updatedAt: now }).where(eq(groups.groupId, message.groupId)).run();
+  }
+  if (!existing || !existing.name) {
+    deps.onGroupSeen?.(message.groupId);
   }
 
   const inserted = db.insert(messages)
@@ -52,6 +59,7 @@ export async function ingestMessage(deps: IngestDeps, message: NormalizedMessage
   if (message.groupId === deps.bindGroupId) {
     const bound = autoConfirmBind(db, message.senderQq, message.text);
     if (bound) {
+      deps.onBindConfirmed?.(bound.userId, message.groupId);
       logger.info({ qq: bound.qq }, "绑定码已在群内自动确认");
     }
   }

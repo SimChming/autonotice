@@ -617,4 +617,8 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
   - Android：`pnpm --filter @autonotice/mobile sync:android`，再以 `JAVA_HOME=D:\jdk-17\jdk-17.0.20.1+1`、`ANDROID_HOME=D:\android-sdk` 执行 `apps/mobile/android/gradlew.bat assembleDebug`
 - 2026-10-22 本地打包：Android debug APK 构建成功（3.89 MB，内嵌服务器地址），产物置于工作区 `release/v2.0.0/`；Tauri 首次构建需编译全部 Rust 依赖，耗时较长。
 - 2026-10-22 GitHub 搜索 `infinite skill` 只找到 `Infinite-Labs-AI/infinite-skills`（面向 Codex 的营销/目标拆解技能）等无关仓库，未发现可用的「人格服从」技能；本次改为在 persona 内直接落地等价规则。
+- 2026-10-22 v2.1.0 绑定修复：`confirmBind` 改为幂等（群内发码自动确认消费绑定码后，网页再确认返回已有绑定而不是「绑定码无效或已过期」）；新增 `GET /api/v1/bind/status`，客户端在展示绑定码期间每 3 秒轮询，群内自动确认后直接跳成功态。
+- 2026-10-22 v2.1.0 多群聊：新增 `user_groups` 表（migration 0003）、`services/groups.ts` 与 `/api/v1/groups`（GET 列表 / POST bind / DELETE 解绑）；绑定 QQ 时自动把主群加入列表，已绑定用户在任何群发言都会自动加入该群。
+- 2026-10-22 v2.1.0 群来源：`groups.name` 通过 NapCat `get_group_info` 在首次见群/绑定群时补全，头像使用 `https://p.qlogo.cn/gh/<群号>/<群号>/100`；日程 API 返回 `groupName/groupAvatar`，客户端卡片展示群名称（群号作为附注），并支持按来源群筛选、新建日程时选择来源群。
+- 2026-10-22 v2.1.0 验证：本地内存库完成 register → bind/start → confirm（连续两次幂等）→ bind/status → groups → schedules 全链路；版本号统一提升到 2.1.0。
 

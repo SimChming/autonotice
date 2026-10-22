@@ -11,6 +11,7 @@ import { createDatabase } from "./db/client.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerBindRoutes } from "./routes/bind.js";
 import { registerScheduleRoutes } from "./routes/schedules.js";
+import { registerGroupRoutes } from "./routes/groups.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { seedSkills } from "./skills/registry.js";
 import { OneBotClient } from "./onebot/client.js";
@@ -26,6 +27,7 @@ import { startReminderScheduler } from "./scheduler/reminders.js";
 import { fireEventTriggers, startTriggerScheduler } from "./triggers/executor.js";
 import { AdminChatHub } from "./admin/chat-hub.js";
 import { registerAdminChatRoutes } from "./admin/chat-routes.js";
+import { ensureGroup, linkUserGroup, refreshGroupInfo } from "./services/groups.js";
 
 /**
  * 装配 Fastify 实例。路由层只做：鉴权 → zod 校验 → 调服务 → 返回（§4.4）。
@@ -73,6 +75,9 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     bindGroupId: config.bind.groupId,
     onAtBot: bot.onGroupAt,
     onBoundUserMessage: (userId, message, msgId) => {
+      // 已绑定用户在任何群发言，都自动把该群加入他的多群聊列表。
+      ensureGroup(db, message.groupId);
+      linkUserGroup(db, userId, message.groupId);
       void (async () => {
         try {
           const items = await extractSchedules(llm, message.text);
@@ -97,6 +102,15 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
         app.log.warn({ err: error }, "事件触发器处理失败");
       });
     },
+    onGroupSeen: (groupId) => {
+      void refreshGroupInfo(onebot, db, groupId, app.log).catch((error: unknown) => {
+        app.log.warn({ err: error, groupId }, "补全群信息失败");
+      });
+    },
+    onBindConfirmed: (userId, groupId) => {
+      linkUserGroup(db, userId, groupId);
+      void refreshGroupInfo(onebot, db, groupId, app.log).catch(() => undefined);
+    },
     logger: app.log,
   };
 
@@ -109,6 +123,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
 
   registerAuthRoutes(app, { db, config });
   registerBindRoutes(app, { db, config });
+  registerGroupRoutes(app, { db, onebot });
   registerScheduleRoutes(app, { db });
   registerAdminRoutes(app, { db, config, onebot });
   adminChatHub.registerRoute(app);

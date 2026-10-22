@@ -28,6 +28,7 @@ export function SchedulePage() {
   const deleteSchedule = useScheduleStore((state) => state.deleteSchedule);
 
   const [filter, setFilter] = useState<Filter>("all");
+  const [groupFilter, setGroupFilter] = useState("all");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -44,15 +45,28 @@ export function SchedulePage() {
   );
   const doneCount = useMemo(() => items.filter((item) => item.status === "done").length, [items]);
 
+  const groupOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of items) {
+      if (item.groupId) {
+        map.set(item.groupId, item.groupName?.trim() || `群 ${item.groupId}`);
+      }
+    }
+    return [...map.entries()].map(([groupId, label]) => ({ groupId, label }));
+  }, [items]);
+
   const visibleItems = useMemo(() => {
-    if (filter === "pending") {
-      return items.filter((item) => item.status === "pending");
+    const byStatus =
+      filter === "pending"
+        ? items.filter((item) => item.status === "pending")
+        : filter === "done"
+          ? items.filter((item) => item.status === "done")
+          : items;
+    if (groupFilter === "all") {
+      return byStatus;
     }
-    if (filter === "done") {
-      return items.filter((item) => item.status === "done");
-    }
-    return items;
-  }, [filter, items]);
+    return byStatus.filter((item) => item.groupId === groupFilter);
+  }, [filter, groupFilter, items]);
 
   const groups = useMemo(() => groupSchedules(visibleItems), [visibleItems]);
 
@@ -128,6 +142,27 @@ export function SchedulePage() {
         </div>
         <span className="toolbar__hint">按截止日期分组</span>
       </div>
+
+      {groupOptions.length > 1 ? (
+        <div className="toolbar toolbar--groups">
+          <label className="toolbar__select-label" htmlFor="group-filter">
+            来源群
+          </label>
+          <select
+            id="group-filter"
+            className="toolbar__select"
+            value={groupFilter}
+            onChange={(event) => setGroupFilter(event.target.value)}
+          >
+            <option value="all">全部群聊</option>
+            {groupOptions.map((option) => (
+              <option key={option.groupId} value={option.groupId}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       {loading && items.length === 0 ? (
         <div className="schedule-list" aria-hidden="true">

@@ -6,6 +6,7 @@ export * from "./constants.js";
 export * from "./api/health.js";
 export * from "./api/auth.js";
 export * from "./api/bind.js";
+export * from "./api/group.js";
 export * from "./api/schedule.js";
 export * from "./api/skill.js";
 export * from "./api/admin.js";

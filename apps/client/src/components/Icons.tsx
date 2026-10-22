@@ -84,6 +84,16 @@ export function UserIcon({ className }: IconProps) {
   );
 }
 
+/** 群聊：两个重叠的对话气泡。 */
+export function GroupsIcon({ className }: IconProps) {
+  return (
+    <SvgIcon className={className}>
+      <path d="M4.5 5.5h10.8v8.2H9.2L5.6 17v-3.3H4.5Z" />
+      <path d="M9.8 16.6v1.9h5.6l3 2.4v-2.4h1.1V9.6h-3.1" />
+    </SvgIcon>
+  );
+}
+
 export function PlusIcon({ className }: IconProps) {
   return (
     <SvgIcon className={className}>
