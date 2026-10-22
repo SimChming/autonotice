@@ -1,12 +1,17 @@
 import {
   adminLoginResponseSchema,
+  adminMemorySchema,
   adminOverviewResponseSchema,
+  adminPromptResponseSchema,
   adminSettingsResponseSchema,
   adminUserListResponseSchema,
   skillListResponseSchema,
   skillManifestSchema,
   type AdminLoginRequest,
+  type AdminMemory,
+  type AdminMemoryUpdate,
   type AdminOverviewResponse,
+  type AdminPromptResponse,
   type AdminSettingsUpdate,
   type CreateSkillRequest,
   type SkillManifest,
@@ -255,6 +260,25 @@ export const adminApi = {
 
   async getSettings(): Promise<AdminSettings> {
     return (await request("/admin/settings", adminSettingsResponseSchema)) as AdminSettings;
+  },
+
+  getPrompt(): Promise<AdminPromptResponse> {
+    return request("/admin/prompt", adminPromptResponseSchema);
+  },
+
+  updatePrompt(overridePrompt: string): Promise<AdminPromptResponse> {
+    return request("/admin/prompt", adminPromptResponseSchema, {
+      method: "PUT",
+      body: { overridePrompt },
+    });
+  },
+
+  updateMemory(id: number, patch: AdminMemoryUpdate): Promise<AdminMemory> {
+    return request(`/admin/memories/${id}`, adminMemorySchema, { method: "PATCH", body: patch });
+  },
+
+  async deleteMemory(id: number): Promise<void> {
+    await rawRequest(`/admin/memories/${id}`, { method: "DELETE" });
   },
 
   async updateSettings(patch: AdminSettingsUpdate): Promise<AdminSettings> {

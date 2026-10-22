@@ -47,3 +47,43 @@ export const adminOverviewResponseSchema = z.object({
 });
 
 export type AdminOverviewResponse = z.infer<typeof adminOverviewResponseSchema>;
+
+/** 后台展示/编辑的记忆条目。 */
+export const adminMemorySchema = z.object({
+  id: z.number().int().positive(),
+  sessionKey: z.string(),
+  senderQq: z.string().nullable(),
+  content: z.string(),
+  tags: z.array(z.string()),
+  kind: z.string(),
+  scope: z.string(),
+  createdAt: z.string(),
+});
+
+export type AdminMemory = z.infer<typeof adminMemorySchema>;
+
+/** 初始 prompt（当前人格默认值 + 覆盖值）与记忆列表。 */
+export const adminPromptResponseSchema = z.object({
+  personaId: z.string(),
+  personaName: z.string(),
+  defaultPrompt: z.string(),
+  overridePrompt: z.string(),
+  effectivePrompt: z.string(),
+  memoryCount: z.number().int(),
+  items: z.array(adminMemorySchema),
+});
+
+export type AdminPromptResponse = z.infer<typeof adminPromptResponseSchema>;
+
+export const adminPromptUpdateSchema = z.object({
+  overridePrompt: z.string().max(20000),
+});
+
+export type AdminPromptUpdate = z.infer<typeof adminPromptUpdateSchema>;
+
+export const adminMemoryUpdateSchema = z.object({
+  content: z.string().trim().min(1).max(500).optional(),
+  tags: z.array(z.string().trim().min(1).max(24)).max(10).optional(),
+});
+
+export type AdminMemoryUpdate = z.infer<typeof adminMemoryUpdateSchema>;

@@ -1,10 +1,13 @@
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { count, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import {
   adminLoginRequestSchema,
   adminLoginResponseSchema,
+  adminMemoryUpdateSchema,
   adminOverviewResponseSchema,
+  adminPromptResponseSchema,
+  adminPromptUpdateSchema,
   adminSettingsResponseSchema,
   adminSettingsUpdateSchema,
   adminUserListResponseSchema,
@@ -16,12 +19,13 @@ import {
 import { OWNER_QQ, SERVICE_VERSION } from "@autonotice/shared";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
-import { bindings, messages, scheduleItems, skills, users } from "../db/schema.js";
+import { bindings, memories, messages, scheduleItems, skills, users } from "../db/schema.js";
 import type { OneBotClient } from "../onebot/client.js";
 import { fail, requireAdmin } from "../auth/guard.js";
 import { getRuntimeLlm, maskKey } from "../llm/runtime.js";
-import { listSkills, setSetting, toManifest } from "../skills/registry.js";
+import { getActivePersona, getSetting, listSkills, setSetting, toManifest } from "../skills/registry.js";
 import { SUPPORTED_HANDLERS } from "../skills/handlers.js";
+import { embedText } from "../bot/memory.js";
 
 interface AdminRouteOptions {
   db: Db;
@@ -33,6 +37,43 @@ function safeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
   return left.length === right.length && timingSafeEqual(left, right);
+}
+
+const PROMPT_OVERRIDE_KEY = "prompt.persona_override";
+
+function toMemoryItem(row: typeof memories.$inferSelect) {
+  let tags: string[] = [];
+  try {
+    tags = JSON.parse(row.tags) as string[];
+  } catch {
+    tags = row.tags ? row.tags.split(",").filter(Boolean) : [];
+  }
+  return {
+    id: row.id,
+    sessionKey: row.sessionKey,
+    senderQq: row.senderQq,
+    content: row.content,
+    tags,
+    kind: row.kind,
+    scope: row.scope,
+    createdAt: new Date(row.createdAt).toISOString(),
+  };
+}
+
+/** 后台「提示词」页数据：当前人格默认 prompt + 覆盖值 + 最近记忆。 */
+function buildPromptPayload(db: Db) {
+  const active = getActivePersona(db);
+  const override = getSetting(db, PROMPT_OVERRIDE_KEY) ?? "";
+  const rows = db.select().from(memories).orderBy(desc(memories.id)).limit(100).all();
+  return adminPromptResponseSchema.parse({
+    personaId: active.id,
+    personaName: active.name,
+    defaultPrompt: active.prompt,
+    overridePrompt: override,
+    effectivePrompt: override.trim() || active.prompt,
+    memoryCount: db.select({ value: count() }).from(memories).get()?.value ?? 0,
+    items: rows.map(toMemoryItem),
+  });
 }
 
 export function registerAdminRoutes(app: FastifyInstance, { db, config, onebot }: AdminRouteOptions): void {
@@ -128,6 +169,87 @@ export function registerAdminRoutes(app: FastifyInstance, { db, config, onebot }
         apiKeyMasked: maskKey(runtime.apiKey),
       },
     });
+  });
+
+  app.get("/api/v1/admin/prompt", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    return buildPromptPayload(db);
+  });
+
+  app.put("/api/v1/admin/prompt", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const parsed = adminPromptUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return fail(reply, 400, "invalid_request", parsed.error.issues[0]?.message ?? "参数不合法");
+    }
+    setSetting(db, PROMPT_OVERRIDE_KEY, parsed.data.overridePrompt.trim());
+    return buildPromptPayload(db);
+  });
+
+  app.patch("/api/v1/admin/memories/:id", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const id = Number((request.params as { id: string }).id);
+    const existing = db.select().from(memories).where(eq(memories.id, id)).get();
+    if (!existing) {
+      return fail(reply, 404, "not_found", "记忆不存在");
+    }
+    const parsed = adminMemoryUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return fail(reply, 400, "invalid_request", parsed.error.issues[0]?.message ?? "参数不合法");
+    }
+
+    const content = parsed.data.content ?? existing.content;
+    const tags = parsed.data.tags ?? toMemoryItem(existing).tags;
+    let embedding = existing.embedding;
+    if (content !== existing.content) {
+      const runtime = getRuntimeLlm(db, config);
+      const vector = await embedText(
+        {
+          ...config,
+          llm: {
+            ...config.llm,
+            baseUrl: runtime.baseUrl,
+            apiKey: runtime.apiKey,
+            embeddingModel: runtime.embeddingModel,
+          },
+        },
+        content,
+      );
+      if (vector) {
+        embedding = JSON.stringify(vector);
+      }
+    }
+
+    const row = db
+      .update(memories)
+      .set({ content, tags: tags.join(","), embedding })
+      .where(eq(memories.id, id))
+      .returning()
+      .get();
+    return toMemoryItem(row);
+  });
+
+  app.delete("/api/v1/admin/memories/:id", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const id = Number((request.params as { id: string }).id);
+    const existing = db.select().from(memories).where(eq(memories.id, id)).get();
+    if (!existing) {
+      return fail(reply, 404, "not_found", "记忆不存在");
+    }
+    db.delete(memories).where(eq(memories.id, id)).run();
+    return reply.code(204).send();
   });
 
   app.get("/api/v1/admin/users", async (request, reply) => {

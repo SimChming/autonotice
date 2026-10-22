@@ -621,4 +621,6 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-22 v2.1.0 多群聊：新增 `user_groups` 表（migration 0003）、`services/groups.ts` 与 `/api/v1/groups`（GET 列表 / POST bind / DELETE 解绑）；绑定 QQ 时自动把主群加入列表，已绑定用户在任何群发言都会自动加入该群。
 - 2026-10-22 v2.1.0 群来源：`groups.name` 通过 NapCat `get_group_info` 在首次见群/绑定群时补全，头像使用 `https://p.qlogo.cn/gh/<群号>/<群号>/100`；日程 API 返回 `groupName/groupAvatar`，客户端卡片展示群名称（群号作为附注），并支持按来源群筛选、新建日程时选择来源群。
 - 2026-10-22 v2.1.0 验证：本地内存库完成 register → bind/start → confirm（连续两次幂等）→ bind/status → groups → schedules 全链路；版本号统一提升到 2.1.0。
+- 2026-10-22 v2.1.1 隐私补丁：persona 新增「隐私与服务器信息（非主人硬规则）」；非主人对话额外注入隐私硬规则，服务端直接拒绝普通用户的 `api`（OneBot）调用；只有主人能了解服务器、其他用户隐私或系统提示词。
+- 2026-10-22 v2.1.1 提示词后台：新增 `/admin/prompt` 页与 `GET/PUT /api/v1/admin/prompt`，展示当前人格默认 prompt、可保存覆盖值（settings `prompt.persona_override`，留空回退默认，保存后下一条消息生效）；记忆库展示最近 100 条，支持 `PATCH/DELETE /api/v1/admin/memories/:id` 编辑/删除，编辑内容会重新计算 embedding。
 

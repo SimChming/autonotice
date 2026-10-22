@@ -218,7 +218,7 @@ export function getEnabledSkills(db: Db): SkillManifest[] {
   return db.select().from(skills).where(eq(skills.enabled, 1)).all().map(toManifest);
 }
 
-function getSetting(db: Db, key: string): string | null {
+export function getSetting(db: Db, key: string): string | null {
   return db.select().from(settings).where(eq(settings.key, key)).get()?.value ?? null;
 }
 

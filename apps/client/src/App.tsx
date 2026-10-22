@@ -13,6 +13,7 @@ import { AdminRoot } from "./admin/AdminRoot";
 import { AdminChatPage } from "./admin/pages/AdminChat";
 import { AdminModelsPage } from "./admin/pages/AdminModels";
 import { AdminOverviewPage } from "./admin/pages/AdminOverview";
+import { AdminPromptPage } from "./admin/pages/AdminPrompt";
 import { AdminSkillsPage } from "./admin/pages/AdminSkills";
 import { AdminUsersPage } from "./admin/pages/AdminUsers";
 
@@ -73,6 +74,7 @@ export function App() {
         <Route path="/admin" element={<AdminRoot />}>
           <Route index element={<AdminOverviewPage />} />
           <Route path="skills" element={<AdminSkillsPage />} />
+          <Route path="prompt" element={<AdminPromptPage />} />
           <Route path="models" element={<AdminModelsPage />} />
           <Route path="users" element={<AdminUsersPage />} />
           <Route path="chat" element={<AdminChatPage />} />

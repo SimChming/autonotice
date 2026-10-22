@@ -11,6 +11,10 @@ interface EmbeddingResponse {
   data?: Array<{ embedding?: number[] }>;
 }
 
+export async function embedText(config: Config, text: string): Promise<number[] | null> {
+  return embed(config, text);
+}
+
 async function embed(config: Config, text: string): Promise<number[] | null> {
   try {
     const response = await fetch(`${config.llm.baseUrl.replace(/\/$/, "")}/embeddings`, {
