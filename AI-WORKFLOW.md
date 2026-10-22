@@ -607,9 +607,14 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-22 Phase 8：新增 `HANDOFF.md` v2 运维手册（拓扑、部署、配置、NapCat、备份、排查、已知限制）。
 - 2026-10-22 Phase 8：本机到 `github.com:443` 被网络阻断，推送改为「本地 `git bundle` → scp 到服务器 → 服务器带 token 中转 push」；构建与部署仍全部在 GitHub Actions 完成，服务器不编译。
 - 2026-10-22 Phase 8：旧 `main` 先保存为 `legacy-v1` 分支，再把 `v2` 快进到 `main`；发布 tag `v2.0.0` 并在 GitHub Release 附交付说明。
-- 2026-10-22 Phase 8：程序交付形态为同源 Web（`http://120.26.224.86:8080/`，后台 `/admin`）+ `ghcr.io/simchming/autonotice-server` 镜像 + GitHub Release 源码包；v2 仓库未包含原生壳工程，桌面 exe / Android apk 需从 `legacy-v1` 的 Tauri/Capacitor 壳移植后再打包（本机工具链齐备，见下方本地编译环境条目）。
+- 2026-10-22 Phase 8：程序交付形态为同源 Web（`http://120.26.224.86:8080/`，后台 `/admin`）+ `ghcr.io/simchming/autonotice-server` 镜像 + GitHub Release 源码包；原生壳已于同日从 legacy 移植回 `apps/desktop` 与 `apps/mobile`（见下方本地编译/打包条目）。
 - 2026-10-22 Phase 8：后台 AI 聊天与技能自迭代线上实测通过（`/api/v1/admin/chat/history|send`、`tool.skill.manage` list 返回 10 个技能），OneBot 反向 WS 在容器重启后自动回连。
 - 2026-10-22 消息可靠性：OneBot 事件按 `message_id` 去重；同一 sessionKey 的对话串行处理；历史注入带「已回复/未回复」标记且当前消息不再重复出现；单轮最多发送 4 条、followups 上限 2 条并按归一化文本跨轮去重，修复重复回复与刷屏。
 - 2026-10-22 人格调整：加入「对主人的服从」优先级——主人提出的无害指令（含图片/表情/语音、角色扮演、白丝等）直接执行，仅拒绝违法、未成年人色情、真实他人隐私、暴力与破坏性系统操作；并加入「不要重复/不要刷屏」硬规则。
-- 2026-10-22 本地编译环境：Node v24.20.0 + pnpm 9.15.4 + VS Build Tools 2022 + Rust 1.99.1 (MSVC) + Android SDK 34（`D:\android-sdk`）+ JDK 25 + Go 1.27；`better-sqlite3` 已用本地 MSVC 重新编译成功，`pnpm build` 全量通过。v2 仓库当前不含 Tauri/Capacitor 壳（Phase 5 决策），旧壳工程仍在工作区根目录 `client/desktop` 与 `client/capacitor`。
+- 2026-10-22 本地编译环境：Node v24.20.0 + pnpm 9.15.4 + VS Build Tools 2022 + Rust 1.99.1 (MSVC) + Android SDK 34（`D:\android-sdk`）+ JDK 25/17 + Go 1.27；`better-sqlite3` 已用本地 MSVC 重新编译成功，`pnpm build` 全量通过。
+- 2026-10-22 原生壳恢复：`apps/desktop`（Tauri 2，产物 exe/msi）与 `apps/mobile`（Capacitor 6 + Android 工程）已从 legacy 壳移植；前端新增 `VITE_API_BASE`（原生壳构建时指向服务器绝对地址，Web 构建仍用同源相对路径）与原生 hash 路由检测。
+  - 桌面：`$env:VITE_API_BASE="http://120.26.224.86:8080"; pnpm --filter @autonotice/client build; $env:PATH="C:\Users\Surface\.cargo\bin;$env:PATH"; pnpm --filter @autonotice/desktop build:desktop`
+  - Android：`pnpm --filter @autonotice/mobile sync:android`，再以 `JAVA_HOME=D:\jdk-17\jdk-17.0.20.1+1`、`ANDROID_HOME=D:\android-sdk` 执行 `apps/mobile/android/gradlew.bat assembleDebug`
+- 2026-10-22 本地打包：Android debug APK 构建成功（3.89 MB，内嵌服务器地址），产物置于工作区 `release/v2.0.0/`；Tauri 首次构建需编译全部 Rust 依赖，耗时较长。
+- 2026-10-22 GitHub 搜索 `infinite skill` 只找到 `Infinite-Labs-AI/infinite-skills`（面向 Codex 的营销/目标拆解技能）等无关仓库，未发现可用的「人格服从」技能；本次改为在 persona 内直接落地等价规则。
 

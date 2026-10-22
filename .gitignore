@@ -19,6 +19,9 @@ release/
 apps/shells/android/**/build/
 apps/shells/android/.gradle/
 apps/shells/desktop/target/
+apps/desktop/src-tauri/target/
+apps/mobile/android/.gradle/
+apps/mobile/android/app/build/
 
 # 编辑器 / 系统
 .DS_Store
