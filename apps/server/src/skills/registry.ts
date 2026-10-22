@@ -91,6 +91,54 @@ const BUILTIN_SKILLS: Array<Omit<CreateSkillRequest, "version"> & { version?: st
     permissions: "owner",
     paramsSchema: {},
   },
+  {
+    id: "tool.trigger.create",
+    name: "创建触发器",
+    description:
+      "给自己安排定时或事件触发的工作。params: kind=time|event，at=ISO 时间（time 必填），event=关键词（event 必填），say=到点要发的话，action={type:say|skill|shell|notify,...}。",
+    type: "tool",
+    enabled: true,
+    prompt: "",
+    handler: "trigger.create",
+    permissions: "bound",
+    paramsSchema: {
+      type: "object",
+      required: ["kind"],
+      properties: {
+        kind: { type: "string", enum: ["time", "event"] },
+        at: { type: "string", description: "ISO8601 时间" },
+        event: { type: "string", description: "事件关键词，逗号分隔" },
+        say: { type: "string", description: "到点发送的文本" },
+        action: { type: "object", description: "更复杂的动作，如 {type:'skill',id,params}" },
+      },
+    },
+  },
+  {
+    id: "tool.trigger.list",
+    name: "列出触发器",
+    description: "列出当前账号尚未执行的触发器。",
+    type: "tool",
+    enabled: true,
+    prompt: "",
+    handler: "trigger.list",
+    permissions: "bound",
+    paramsSchema: {},
+  },
+  {
+    id: "tool.trigger.cancel",
+    name: "取消触发器",
+    description: "取消一个触发器，参数 id。",
+    type: "tool",
+    enabled: true,
+    prompt: "",
+    handler: "trigger.cancel",
+    permissions: "bound",
+    paramsSchema: {
+      type: "object",
+      required: ["id"],
+      properties: { id: { type: "number" } },
+    },
+  },
 ];
 
 export function seedSkills(db: Db): void {

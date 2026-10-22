@@ -1,7 +1,10 @@
 import type { FastifyBaseLogger } from "fastify";
+import { eq } from "drizzle-orm";
 import { OWNER_QQ, type SkillManifest } from "@autonotice/shared";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
+import type { NotifyHub } from "../notify/hub.js";
+import { triggers } from "../db/schema.js";
 import type { OneBotClient } from "../onebot/client.js";
 import { fetchBinary } from "../pipeline/fetcher.js";
 import { getActivePersona, setActivePersona } from "./registry.js";
@@ -10,6 +13,7 @@ export interface SkillContext {
   db: Db;
   config: Config;
   onebot: OneBotClient;
+  hub: NotifyHub;
   logger: FastifyBaseLogger;
   qq: string;
   userId: number | null;
@@ -22,6 +26,9 @@ export const SUPPORTED_HANDLERS = [
   { id: "image.describe", description: "视觉模型识图（params.url）" },
   { id: "persona.switch", description: "切换人格（params.id，仅主人）" },
   { id: "persona.current", description: "查看当前人格（仅主人）" },
+  { id: "trigger.create", description: "创建定时/事件触发器（params.kind/at/event/say/action）" },
+  { id: "trigger.list", description: "列出自己的触发器" },
+  { id: "trigger.cancel", description: "取消触发器（params.id）" },
 ] as const;
 
 export class SkillDeniedError extends Error {}
@@ -118,7 +125,90 @@ export async function executeSkill(
       return `当前人格：${persona.name}（${persona.id}）`;
     }
 
+    case "trigger.create": {
+      if (!context.userId) {
+        return "请先绑定账号后再创建触发器";
+      }
+      const kind = String(params.kind ?? "time");
+      if (kind !== "time" && kind !== "event") {
+        return "kind 只能是 time 或 event";
+      }
+      const at = kind === "time" ? toTimestamp(params.at) : null;
+      if (kind === "time" && !at) {
+        return "time 触发器需要合法的 at（ISO8601）";
+      }
+      const event = kind === "event" ? String(params.event ?? "").trim() : null;
+      if (kind === "event" && !event) {
+        return "event 触发器需要关键词 event";
+      }
+
+      let action: Record<string, unknown> | null = null;
+      if (params.action && typeof params.action === "object") {
+        action = params.action as Record<string, unknown>;
+      } else if (typeof params.say === "string" && params.say.trim()) {
+        action = { type: "say", text: params.say.trim() };
+      }
+      if (!action || typeof action.type !== "string") {
+        return "需要 action（say/skill/shell/notify）或 say 文本";
+      }
+      if (action.type === "shell" && context.qq !== OWNER_QQ) {
+        return "只有主人可以创建 shell 触发器";
+      }
+
+      const row = context.db
+        .insert(triggers)
+        .values({
+          userId: context.userId,
+          sessionKey: context.sessionKey,
+          kind,
+          at,
+          event,
+          action: JSON.stringify(action),
+          enabled: 1,
+          createdAt: Date.now(),
+        })
+        .returning({ id: triggers.id })
+        .get();
+      return `触发器已创建 id=${row.id}（${kind}）`;
+    }
+
+    case "trigger.list": {
+      if (!context.userId) {
+        return "请先绑定账号";
+      }
+      const rows = context.db
+        .select()
+        .from(triggers)
+        .where(eq(triggers.userId, context.userId))
+        .all()
+        .filter((row) => row.enabled === 1);
+      return JSON.stringify(
+        rows.map((row) => ({ id: row.id, kind: row.kind, at: row.at, event: row.event, action: row.action })),
+      );
+    }
+
+    case "trigger.cancel": {
+      if (!context.userId) {
+        return "请先绑定账号";
+      }
+      const id = Number(params.id);
+      const row = context.db.select().from(triggers).where(eq(triggers.id, id)).get();
+      if (!row || row.userId !== context.userId) {
+        return "触发器不存在";
+      }
+      context.db.update(triggers).set({ enabled: 0 }).where(eq(triggers.id, id)).run();
+      return `已取消触发器 id=${id}`;
+    }
+
     default:
       return `未知技能处理器 ${handler}`;
   }
+}
+
+function toTimestamp(value: unknown): number | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? null : time;
 }

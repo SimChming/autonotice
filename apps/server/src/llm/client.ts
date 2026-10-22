@@ -1,4 +1,8 @@
-import type { Config } from "../config.js";
+export interface LlmRuntimeConfig {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
 
 export interface LlmMessage {
   role: "system" | "user";
@@ -14,19 +18,19 @@ interface ChatCompletionResponse {
   choices?: Array<{ message?: { content?: string } }>;
 }
 
-export function createLlmClient(config: Config): LlmClient {
-  const endpoint = `${config.llm.baseUrl.replace(/\/$/, "")}/chat/completions`;
-
+export function createLlmClient(getConfig: () => LlmRuntimeConfig): LlmClient {
   return {
     async chatJson(messages) {
+      const config = getConfig();
+      const endpoint = `${config.baseUrl.replace(/\/$/, "")}/chat/completions`;
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${config.llm.apiKey}`,
+          Authorization: `Bearer ${config.apiKey}`,
         },
         body: JSON.stringify({
-          model: config.llm.model,
+          model: config.model,
           messages,
           temperature: 0.2,
           response_format: { type: "json_object" },

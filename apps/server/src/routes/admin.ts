@@ -1,24 +1,32 @@
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import {
   adminLoginRequestSchema,
   adminLoginResponseSchema,
+  adminOverviewResponseSchema,
+  adminSettingsResponseSchema,
+  adminSettingsUpdateSchema,
+  adminUserListResponseSchema,
   createSkillRequestSchema,
   skillListResponseSchema,
   skillManifestSchema,
   updateSkillRequestSchema,
 } from "@autonotice/shared";
+import { OWNER_QQ, SERVICE_VERSION } from "@autonotice/shared";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
-import { skills } from "../db/schema.js";
+import { bindings, messages, scheduleItems, skills, users } from "../db/schema.js";
+import type { OneBotClient } from "../onebot/client.js";
 import { fail, requireAdmin } from "../auth/guard.js";
-import { listSkills, toManifest } from "../skills/registry.js";
+import { getRuntimeLlm, maskKey } from "../llm/runtime.js";
+import { listSkills, setSetting, toManifest } from "../skills/registry.js";
 import { SUPPORTED_HANDLERS } from "../skills/handlers.js";
 
 interface AdminRouteOptions {
   db: Db;
   config: Config;
+  onebot: OneBotClient;
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -27,7 +35,7 @@ function safeEqual(a: string, b: string): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-export function registerAdminRoutes(app: FastifyInstance, { db, config }: AdminRouteOptions): void {
+export function registerAdminRoutes(app: FastifyInstance, { db, config, onebot }: AdminRouteOptions): void {
   app.post("/api/v1/admin/login", async (request, reply) => {
     const parsed = adminLoginRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -45,6 +53,124 @@ export function registerAdminRoutes(app: FastifyInstance, { db, config }: AdminR
       { expiresIn: "12h" },
     );
     return adminLoginResponseSchema.parse({ token });
+  });
+
+  app.get("/api/v1/admin/overview", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const countOf = (table: typeof users | typeof bindings | typeof scheduleItems | typeof messages | typeof skills) =>
+      db.select({ value: count() }).from(table).get()?.value ?? 0;
+
+    return adminOverviewResponseSchema.parse({
+      users: countOf(users),
+      bindings: countOf(bindings),
+      schedules: countOf(scheduleItems),
+      messages: countOf(messages),
+      skills: countOf(skills),
+      onebotConnected: onebot.connected,
+      uptime: process.uptime(),
+      version: SERVICE_VERSION,
+    });
+  });
+
+  app.get("/api/v1/admin/settings", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const runtime = getRuntimeLlm(db, config);
+    return adminSettingsResponseSchema.parse({
+      llm: {
+        model: runtime.model,
+        visionModel: runtime.visionModel,
+        embeddingModel: runtime.embeddingModel,
+        baseUrl: runtime.baseUrl,
+        apiKeyMasked: maskKey(runtime.apiKey),
+      },
+    });
+  });
+
+  app.put("/api/v1/admin/settings", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const parsed = adminSettingsUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return fail(reply, 400, "invalid_request", parsed.error.issues[0]?.message ?? "参数不合法");
+    }
+
+    if (parsed.data.model) {
+      setSetting(db, "llm.model", parsed.data.model);
+    }
+    if (parsed.data.visionModel) {
+      setSetting(db, "llm.vision_model", parsed.data.visionModel);
+    }
+    if (parsed.data.embeddingModel) {
+      setSetting(db, "llm.embedding_model", parsed.data.embeddingModel);
+    }
+    if (parsed.data.baseUrl) {
+      setSetting(db, "llm.base_url", parsed.data.baseUrl);
+    }
+    if (parsed.data.apiKey && !parsed.data.apiKey.includes("*")) {
+      setSetting(db, "llm.api_key", parsed.data.apiKey);
+    }
+
+    const runtime = getRuntimeLlm(db, config);
+    return adminSettingsResponseSchema.parse({
+      llm: {
+        model: runtime.model,
+        visionModel: runtime.visionModel,
+        embeddingModel: runtime.embeddingModel,
+        baseUrl: runtime.baseUrl,
+        apiKeyMasked: maskKey(runtime.apiKey),
+      },
+    });
+  });
+
+  app.get("/api/v1/admin/users", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const rows = db
+      .select({
+        id: users.id,
+        username: users.username,
+        createdAt: users.createdAt,
+        qq: bindings.qq,
+        verifiedAt: bindings.verifiedAt,
+      })
+      .from(users)
+      .leftJoin(bindings, eq(bindings.userId, users.id))
+      .all();
+
+    return adminUserListResponseSchema.parse({
+      items: rows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        qq: row.qq,
+        role: row.qq === OWNER_QQ ? "owner" : "user",
+        verifiedAt: row.verifiedAt === null ? null : new Date(row.verifiedAt).toISOString(),
+        createdAt: new Date(row.createdAt).toISOString(),
+      })),
+    });
+  });
+
+  app.delete("/api/v1/admin/users/:id", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const id = Number((request.params as { id: string }).id);
+    const existing = db.select().from(users).where(eq(users.id, id)).get();
+    if (!existing) {
+      return fail(reply, 404, "not_found", "用户不存在");
+    }
+    db.delete(users).where(eq(users.id, id)).run();
+    return reply.code(204).send();
   });
 
   app.get("/api/v1/admin/skills", async (request, reply) => {

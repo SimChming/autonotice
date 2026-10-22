@@ -8,6 +8,11 @@ import { SchedulePage } from "./pages/Schedule";
 import { SettingsPage } from "./pages/Settings";
 import { UNAUTHORIZED_EVENT } from "./services/api";
 import { useAuthStore } from "./stores/auth";
+import { AdminRoot } from "./admin/AdminRoot";
+import { AdminModelsPage } from "./admin/pages/AdminModels";
+import { AdminOverviewPage } from "./admin/pages/AdminOverview";
+import { AdminSkillsPage } from "./admin/pages/AdminSkills";
+import { AdminUsersPage } from "./admin/pages/AdminUsers";
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const token = useAuthStore((state) => state.token);
@@ -58,6 +63,13 @@ export function App() {
           <Route path="alerts" element={<AlertsPage />} />
           <Route path="bind" element={<BindPage />} />
           <Route path="settings" element={<SettingsPage />} />
+        </Route>
+        {/* 管理后台：独立管理员 token，不挂载用户端 Layout，也不受用户登录状态影响。 */}
+        <Route path="/admin" element={<AdminRoot />}>
+          <Route index element={<AdminOverviewPage />} />
+          <Route path="skills" element={<AdminSkillsPage />} />
+          <Route path="models" element={<AdminModelsPage />} />
+          <Route path="users" element={<AdminUsersPage />} />
         </Route>
         <Route path="*" element={<RootRedirect />} />
       </Routes>

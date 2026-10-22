@@ -262,6 +262,28 @@ autonotice/                          # 仓库根（v2 分支）
 
 ***
 
+### 4.8 自主对话与触发器（Phase 7 增强）
+
+**要解决的问题**：旧实现固定「1 条主回复 + 最多 2 条 followups」就结束，模型会把内部计划当 followups 发给用户（如「找到数据库就统计用户数」），然后停下来等用户再发消息，严重拖慢任务完成。
+
+**自主续跑**
+
+- JSON 契约新增 `"continue": boolean`。为 true 时服务端**不等待用户**，自动追加一轮上下文（附「继续完成未完成工作」提示）继续调用工具；最多 10 轮。
+- 每轮 `reply` / `followups` 立即逐条发送并去重，用户能看到工作过程，而不是最后一次性丢出结论。
+- **对话结束边界由模型自己决定**：任务完成或确实需要用户补充信息才结束；否则必须用 `api` / `skill` / `autonotice` / `command` 继续推进。
+- `followups` 语义严格限定为「给用户看的补充消息」（最多 3 条），禁止把内部计划/TODO 当 followups 发送。
+- 工具调用已不再依赖用户再次发言：command / api / skill 的结果都会回填上下文并继续循环。
+
+**触发器（让机器人给自己安排未来的工作）**
+
+- 新增 `triggers` 表：`userId, session_key, kind(time|event), at, event, action(JSON), enabled, last_fired_at`。
+- 技能：`tool.trigger.create`（time 需 `at`，event 需关键词；可传 `say` 或 `action`）、`tool.trigger.list`、`tool.trigger.cancel`。
+- 时间触发器由 node-cron **每 15 秒**扫描，到点执行后自动停用（一次性）。
+- 事件触发器在群消息入库后按关键词匹配当前会话，命中即执行并停用。
+- 动作类型：`say`（发消息）、`skill`（执行技能）、`shell`（仅主人触发器允许）、`notify`（客户端推送）。权限跟随触发器创建者，服务端硬校验，不信任模型。
+
+***
+
 ## 5. 数据库 Schema（drizzle，全部新表）
 
 ```
@@ -287,6 +309,8 @@ agent_actions(id, session_key, action, params, result, created_at)  # 机器人 
 doc_files(id, user_id, kind, title, path, quota_date, created_at)   # 文档生成配额按 (user,日期) 计数
 skills(id PK, name, description, type, enabled, prompt, handler,   # 可插拔技能（§4.7）
        permissions, params_schema, version, builtin, created_at, updated_at)
+triggers(id, user_id, session_key, kind, at, event, action,        # 机器人自建触发器（§4.8）
+         enabled, last_fired_at, created_at)
 ```
 
 ## 6. API 契约（zod 定义于 packages/shared/src/api/）
@@ -409,6 +433,8 @@ GET  /api/v1/admin/overview                 → 连接状态/配额/审计
 - [ ] `bot/memory.ts` + `bot/history.ts` + 摘要任务：按 §4.5 实现（embedding 用 dashscope text-embedding-v4，暴力余弦 top5）
 - [ ] `bot/shell.ts`：主人专属 bash 持久会话（cwd 保持、60s 超时、256KB 截断、`reset/重置` 重建、输出哨兵协议）
 - [ ] 私聊限流（普通用户 3 次/5 分钟，超限返回人机话术不调 LLM）；主人无限
+- [x] 自主续跑：契约 `continue` + 每轮即时发送 + followups 仅限用户可见补充（§4.8）
+- [x] 触发器机制：`tool.trigger.create/list/cancel`，时间每 15s 扫描、事件按群消息关键词触发
 - [ ] 权限门控全部按 §4.6 落实（身份行注入 prompt；agent 动作剥 target 参数）
 
 **验收**：@ 机器人闲聊有人格、不认错主人；主人 `/sh ls` 免模型直通 shell，普通用户要 shell 被调皮拒绝；**重启容器后机器人记得重启前的对话**；跨会话语义召回生效（验收见 §4.5）；长消息带 `[CQ:image,...]` 时图片正常发出（上一代经典 bug）。
@@ -420,12 +446,12 @@ GET  /api/v1/admin/overview                 → 连接状态/配额/审计
 **任务**
 
 - [ ] admin 路由组（JWT 双 scope）：settings 热更新（模型预设选择按钮：通义闪速/Plus/Max、DeepSeek Chat/思考 + 自由输入；密钥提交含 `*` 则保留旧值）、能力七开关、用户与角色管理、审计
-- [ ] settings 优先级：DB `settings` 表 > `.env`（与上代一致，改 .env 不重启不生效的坑不再犯）
+- [x] settings 优先级：DB `settings` 表 > `.env`（与上代一致，改 .env 不重启不生效的坑不再犯）
 - [ ] 主人 QQ `3874095145` 免密 SSO 进后台（onebot 在线时验证发起者）
 - [ ] `/api/v1/agent/*` 标准动作接口（供任意外部 LLM 调用：notify.send / client.alarm / schedule.\*）+ `agent_actions` 审计
 - [ ] 文档生成（xlsx/docx/pdf，配额默认 2/人/日，容器内装中文字体防 PDF 乱码）
-- [ ] admin 前端页（复用 client 路由 `/admin`，自适应三档）
-- [ ] 后台技能管理页：技能列表/启停/新增（persona/tool/instruction）/删除，handler 从白名单下拉选择（API 已就绪）
+- [x] admin 前端页（复用 client 路由 `/admin`，自适应三档）
+- [x] 后台技能管理页：技能列表/启停/新增（persona/tool/instruction）/删除，handler 从白名单下拉选择
 
 **验收**：后台改模型 → 下一条机器人消息即用新模型（无需重启）；普通用户 token 访问 `/admin/*` 返回 403；主人从 QQ 侧发起可免密进后台；文档生成下载成功且配额生效。
 
@@ -559,4 +585,8 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-22 Skill 机制：新增 `skills` 表与 `skills/registry.ts`，内置 persona.whale / persona.strict / image.send / image.describe / persona.switch / persona.current；自定义技能只允许声明式清单 + handler 白名单，服务端不执行用户代码。
 - 2026-10-22 Skill 机制：对话 JSON 契约新增 `skill` 字段；启用技能说明与附加指令注入 system prompt；人格由 `settings.persona.active` 决定，切换仅主人可用。
 - 2026-10-22 Skill 机制：管理 API 已上线（admin scope JWT + `/api/v1/admin/skills*`），图形化页面待 Phase 7；默认管理员账号取 `.env` 的 ADMIN_USERNAME/ADMIN_PASSWORD。
+- 2026-10-22 Phase 7：管理后台 GUI 上线，地址 `http://<服务器>:8080/admin`，独立 admin token（localStorage `autonotice_admin_token`），含概览/技能/模型/用户四页；普通用户设置页仅在 `?admin=1` 或已有管理员 token 时显示入口。
+- 2026-10-22 Phase 7：admin settings 持久化到 DB `settings`（llm.model/vision/embedding/base_url/api_key），聊天与抽取的 LLM 客户端每次调用读取运行时配置，改模型无需重启；API key 掩码提交含 `*` 时保留旧值。
+- 2026-10-22 Phase 7：对话改为自主续跑（`continue` + 最多 10 轮 + 每轮即时发送去重），followups 仅限用户可见内容；修复“发两条计划就停下来等用户”的问题。
+- 2026-10-22 Phase 7：新增 `triggers` 表与 `tool.trigger.create/list/cancel`，时间触发器每 15 秒扫描、事件触发器按群消息关键词匹配；动作支持 say/skill/shell/notify，shell 仅主人触发器可用。
 

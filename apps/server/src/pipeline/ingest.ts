@@ -10,6 +10,7 @@ export interface IngestDeps {
   bindGroupId: string;
   onAtBot: (message: NormalizedMessage) => Promise<void> | void;
   onBoundUserMessage?: (userId: number, message: NormalizedMessage, msgId: number) => void;
+  onGroupMessageEvent?: (sessionKey: string, text: string) => void;
   logger: FastifyBaseLogger;
 }
 
@@ -42,6 +43,10 @@ export async function ingestMessage(deps: IngestDeps, message: NormalizedMessage
   const binding = db.select().from(bindings).where(eq(bindings.qq, message.senderQq)).get();
   if (binding && deps.onBoundUserMessage && message.text.trim()) {
     deps.onBoundUserMessage(binding.userId, message, inserted.id);
+  }
+
+  if (deps.onGroupMessageEvent && message.text.trim()) {
+    deps.onGroupMessageEvent(`group:${message.groupId}`, message.text);
   }
 
   if (message.groupId === deps.bindGroupId) {

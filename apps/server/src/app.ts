@@ -18,10 +18,12 @@ import { registerOneBotWs } from "./onebot/ws.js";
 import { createBotHandlers } from "./bot/handle.js";
 import type { IngestDeps } from "./pipeline/ingest.js";
 import { createLlmClient } from "./llm/client.js";
+import { getRuntimeLlm } from "./llm/runtime.js";
 import { extractSchedules } from "./pipeline/extract.js";
 import { mergeAndSave } from "./pipeline/merge.js";
 import { NotifyHub } from "./notify/hub.js";
 import { startReminderScheduler } from "./scheduler/reminders.js";
+import { fireEventTriggers, startTriggerScheduler } from "./triggers/executor.js";
 
 /**
  * 装配 Fastify 实例。路由层只做：鉴权 → zod 校验 → 调服务 → 返回（§4.4）。
@@ -50,9 +52,10 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   });
 
   const onebot = new OneBotClient();
-  const llm = createLlmClient(config);
+  const llm = createLlmClient(() => getRuntimeLlm(db, config));
   const hub = new NotifyHub(app.log);
   const bot = createBotHandlers({ db, config, llm, hub, onebot, logger: app.log });
+  const triggerContext = { db, config, onebot, hub, logger: app.log };
 
   const ingest: IngestDeps = {
     db,
@@ -78,18 +81,25 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
         }
       })();
     },
+    onGroupMessageEvent: (sessionKey, text) => {
+      void fireEventTriggers(triggerContext, sessionKey, text).catch((error: unknown) => {
+        app.log.warn({ err: error }, "事件触发器处理失败");
+      });
+    },
     logger: app.log,
   };
 
   const reminderTask = startReminderScheduler({ db, hub, onebot, logger: app.log });
+  const triggerTask = startTriggerScheduler(triggerContext);
   app.addHook("onClose", async () => {
     reminderTask.stop();
+    triggerTask.stop();
   });
 
   registerAuthRoutes(app, { db, config });
   registerBindRoutes(app, { db, config });
   registerScheduleRoutes(app, { db });
-  registerAdminRoutes(app, { db, config });
+  registerAdminRoutes(app, { db, config, onebot });
   hub.registerRoute(app);
   registerOneBotWs(app, {
     config,

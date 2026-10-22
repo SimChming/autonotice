@@ -15,7 +15,7 @@ import { runShell } from "./shell.js";
 import { buildInstructionPrompt, buildSkillsPrompt, getActivePersona, getEnabledSkills } from "../skills/registry.js";
 import { executeSkill, SkillDeniedError } from "../skills/handlers.js";
 
-const MAX_ROUNDS = 6;
+const MAX_ROUNDS = 10;
 const RATE_WINDOW_MS = 5 * 60 * 1000;
 const RATE_LIMIT = 3;
 
@@ -34,6 +34,7 @@ const contractSchema = z.object({
     .object({ id: z.string(), params: z.record(z.unknown()).default({}) })
     .nullable()
     .optional(),
+  continue: z.boolean().default(false),
   memory: z
     .object({ content: z.string(), tags: z.array(z.string()).default([]) })
     .nullable()
@@ -116,7 +117,7 @@ export class BotChat {
   }
 
   async handle(input: ChatInput): Promise<void> {
-    const { db, config, llm, logger } = this.deps;
+    const { db, config, llm, logger, hub } = this.deps;
 
     if (!this.allowed(input.senderQq)) {
       await input.send(RATE_LIMIT_REPLY);
@@ -156,9 +157,18 @@ export class BotChat {
       { role: "user", content: input.text || "（空消息）" },
     ];
 
-    let finalReply = "";
-    let followups: string[] = [];
+    const sent = new Set<string>();
+    const sendOnce = async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || sent.has(trimmed)) {
+        return;
+      }
+      sent.add(trimmed);
+      await input.send(trimmed);
+    };
+
     let memory: BotContract["memory"] = null;
+    let nudged = false;
 
     for (let round = 0; round < MAX_ROUNDS; round += 1) {
       let contract: BotContract | null = null;
@@ -178,18 +188,19 @@ export class BotChat {
       }
 
       if (!contract) {
-        await input.send(FALLBACK_REPLY);
-        return;
+        await sendOnce(FALLBACK_REPLY);
+        break;
       }
 
-      if (contract.reply.trim()) {
-        finalReply = contract.reply.trim();
-      }
-      if (contract.followups?.length) {
-        followups = contract.followups.filter((item) => item.trim()).slice(0, 2);
-      }
       if (contract.memory?.content) {
         memory = contract.memory;
+      }
+      if (contract.reply.trim()) {
+        await sendOnce(contract.reply);
+      }
+      for (const extra of (contract.followups ?? []).filter((item) => item.trim()).slice(0, 3)) {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await sendOnce(extra);
       }
 
       let toolResult: string | null = null;
@@ -222,6 +233,7 @@ export class BotChat {
               db,
               config,
               onebot: this.deps.onebot,
+              hub,
               logger,
               qq: input.senderQq,
               userId: binding?.userId ?? null,
@@ -239,20 +251,28 @@ export class BotChat {
         }
       }
 
-      if (toolResult === null) {
-        break;
+      if (toolResult !== null) {
+        messages.push({ role: "user", content: toolResult });
+        continue;
       }
 
-      messages.push({ role: "user", content: toolResult });
+      if (contract.continue && !nudged) {
+        nudged = true;
+        messages.push({
+          role: "user",
+          content:
+            "继续完成你刚才未完成的工作，不要等用户再发消息；可以继续调用技能或 shell。全部完成后给出最终结论，并把 continue 设为 false。",
+        });
+        continue;
+      }
+
+      break;
     }
 
-    const reply = finalReply || "🐋 鲸鱼娘记住啦～";
-    appendHistory(db, input.sessionKey, "assistant", null, reply);
-    await input.send(reply);
+    appendHistory(db, input.sessionKey, "assistant", null, [...sent].join("\n") || "🐋 鲸鱼娘记住啦～");
 
-    for (const extra of followups) {
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      await input.send(extra);
+    if (!sent.size) {
+      await input.send("🐋 鲸鱼娘记住啦～");
     }
 
     if (memory?.content) {

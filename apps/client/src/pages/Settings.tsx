@@ -1,14 +1,20 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { SERVICE_VERSION } from "@autonotice/shared";
 import { useAuthStore } from "../stores/auth";
 import { formatDateTime } from "../utils/date";
 import { ArrowRightIcon, LogoutIcon } from "../components/Icons";
+import { getAdminToken } from "../admin/api";
 
 export function SettingsPage() {
   const user = useAuthStore((state) => state.user);
   const bound = useAuthStore((state) => state.bound);
   const logout = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // 后台入口只在显式带 ?admin=1 或本机已有管理员 token 时出现，普通用户看不到。
+  const showAdminEntry =
+    new URLSearchParams(location.search).get("admin") === "1" || Boolean(getAdminToken());
 
   const initial = user?.username.slice(0, 1).toUpperCase() ?? "?";
 
@@ -88,6 +94,22 @@ export function SettingsPage() {
           </button>
         </div>
       </section>
+
+      {showAdminEntry ? (
+        <section className="panel" aria-labelledby="settings-admin">
+          <h2 id="settings-admin">管理后台</h2>
+          <div className="setting-row">
+            <div>
+              <strong>管理员控制台</strong>
+              <span>使用独立管理员账号登录，管理技能、模型与用户。</span>
+            </div>
+            <Link className="btn btn--ghost btn--sm" to="/admin">
+              进入后台
+              <ArrowRightIcon />
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <p className="version">AUTONOTICE v{SERVICE_VERSION}</p>
     </>

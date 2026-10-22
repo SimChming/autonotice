@@ -154,6 +154,22 @@ export const docFiles = sqliteTable("doc_files", {
   createdAt: integer("created_at").notNull(),
 });
 
+/** 机器人自建触发器：到点自动发消息/执行技能，或按群消息关键词触发。 */
+export const triggers = sqliteTable("triggers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  sessionKey: text("session_key").notNull(),
+  kind: text("kind").notNull(),
+  at: integer("at"),
+  event: text("event"),
+  action: text("action").notNull(),
+  enabled: integer("enabled").notNull().default(1),
+  lastFiredAt: integer("last_fired_at"),
+  createdAt: integer("created_at").notNull(),
+});
+
 /** 可插拔技能：persona（人格）/ tool（LLM 可调用动作）/ instruction（附加提示词）。 */
 export const skills = sqliteTable("skills", {
   id: text("id").primaryKey(),
