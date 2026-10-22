@@ -1,18 +1,22 @@
 import {
   adminLoginResponseSchema,
   adminMemorySchema,
+  adminOpsResponseSchema,
   adminOverviewResponseSchema,
   adminPromptResponseSchema,
   adminSettingsResponseSchema,
+  adminShellResponseSchema,
   adminUserListResponseSchema,
   skillListResponseSchema,
   skillManifestSchema,
   type AdminLoginRequest,
   type AdminMemory,
   type AdminMemoryUpdate,
+  type AdminOpsResponse,
   type AdminOverviewResponse,
   type AdminPromptResponse,
   type AdminSettingsUpdate,
+  type AdminShellResponse,
   type CreateSkillRequest,
   type SkillManifest,
   type UpdateSkillRequest,
@@ -303,6 +307,17 @@ export const adminApi = {
 
   async sendChat(text: string): Promise<void> {
     await rawRequest("/admin/chat/send", { method: "POST", body: { text } });
+  },
+
+  getOps(): Promise<AdminOpsResponse> {
+    return request("/admin/ops", adminOpsResponseSchema);
+  },
+
+  runShell(command: string): Promise<AdminShellResponse> {
+    return request("/admin/shell", adminShellResponseSchema, {
+      method: "POST",
+      body: { command },
+    });
   },
 };
 

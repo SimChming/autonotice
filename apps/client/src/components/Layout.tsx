@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { SERVICE_VERSION } from "@autonotice/shared";
 import { useAuthStore } from "../stores/auth";
 import { useScheduleStore } from "../stores/schedule";
 import { buildAlertSocketUrl, UNAUTHORIZED_EVENT } from "../services/api";
 import { useLayoutMode } from "../hooks/useLayoutMode";
-import { BellIcon, CalendarIcon, GroupsIcon, LinkIcon, UserIcon, WhaleMark } from "./Icons";
+import { BellIcon, CalendarIcon, GroupsIcon, LinkIcon, ShieldIcon, UserIcon, WhaleMark } from "./Icons";
 import { TabBar, type NavItem } from "./TabBar";
 import { ToastHost, type ToastMessage } from "./Toast";
+import { ADMIN_TOKEN_KEY, ADMIN_UNAUTHORIZED_EVENT, getAdminToken } from "../admin/api";
 
 const NAV_ITEMS: NavItem[] = [
   { to: "/schedule", label: "日程", icon: <CalendarIcon /> },
@@ -15,6 +17,22 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/bind", label: "绑定", icon: <LinkIcon /> },
   { to: "/settings", label: "我的", icon: <UserIcon /> },
 ];
+
+const ADMIN_NAV_ITEM: NavItem = { to: "/admin", label: "管理", icon: <ShieldIcon /> };
+
+function Brand({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`brand${compact ? " brand--compact" : ""}`}>
+      <span className="brand__mark">
+        <WhaleMark />
+      </span>
+      <span className="brand__text">
+        <strong>Autonotice {SERVICE_VERSION}</strong>
+        <small>群消息 · 日程 · 提醒</small>
+      </span>
+    </div>
+  );
+}
 
 interface AlertPush {
   type: "alert";
@@ -39,26 +57,31 @@ function isAlertPush(value: unknown): value is AlertPush {
   );
 }
 
-function Brand({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className={`brand${compact ? " brand--compact" : ""}`}>
-      <span className="brand__mark">
-        <WhaleMark />
-      </span>
-      <span className="brand__text">
-        <strong>Autonotice</strong>
-        <small>{compact ? "深海日程管家" : "群消息 · 日程 · 提醒"}</small>
-      </span>
-    </div>
-  );
-}
-
 export function Layout() {
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
   const mode = useLayoutMode();
   const navigate = useNavigate();
   const location = useLocation();
+  const [adminToken, setAdminToken] = useState<string | null>(() => getAdminToken());
+
+  // 管理员登录后（且仅此时）在用户端显示「管理」入口，覆盖 Web / 桌面 / 手机。
+  useEffect(() => {
+    const sync = () => setAdminToken(getAdminToken());
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === ADMIN_TOKEN_KEY) {
+        sync();
+      }
+    };
+    window.addEventListener(ADMIN_UNAUTHORIZED_EVENT, sync);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(ADMIN_UNAUTHORIZED_EVENT, sync);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  const navItems = adminToken ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastSequence = useRef(0);
@@ -166,7 +189,7 @@ export function Layout() {
         <aside className="sidebar">
           <Brand />
           <nav className="sidebar__nav" aria-label="主导航">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -208,7 +231,7 @@ export function Layout() {
           </div>
         </main>
 
-        {mode === "tabs" ? <TabBar items={NAV_ITEMS} /> : null}
+        {mode === "tabs" ? <TabBar items={navItems} /> : null}
       </div>
 
       <ToastHost messages={toasts} onDismiss={dismissToast} onAction={openAlerts} />

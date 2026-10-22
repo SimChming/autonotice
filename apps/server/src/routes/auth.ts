@@ -6,6 +6,7 @@ import type { Config } from "../config.js";
 import { users } from "../db/schema.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { fail } from "../auth/guard.js";
+import { getUserBinding } from "../services/bind.js";
 
 interface AuthRouteOptions {
   db: Db;
@@ -41,6 +42,7 @@ export function registerAuthRoutes(app: FastifyInstance, { db, config }: AuthRou
     return authResponseSchema.parse({
       token: signToken(inserted),
       user: inserted,
+      binding: null,
     });
   });
 
@@ -55,9 +57,13 @@ export function registerAuthRoutes(app: FastifyInstance, { db, config }: AuthRou
       return fail(reply, 401, "invalid_credentials", "用户名或密码错误");
     }
 
+    const binding = getUserBinding(db, user.id);
     return authResponseSchema.parse({
       token: signToken({ id: user.id, username: user.username }),
       user: { id: user.id, username: user.username },
+      binding: binding
+        ? { qq: binding.qq, verifiedAt: new Date(binding.verifiedAt).toISOString() }
+        : null,
     });
   });
 }

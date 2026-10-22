@@ -26,6 +26,8 @@ interface AuthState {
   logout: () => void;
   setBound: (record: BindRecord) => void;
   clearBound: () => void;
+  /** 从服务端同步绑定关系；换设备登录后无需重新绑定。 */
+  refreshBinding: () => Promise<void>;
 }
 
 function storage(): Storage | null {
@@ -160,10 +162,16 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const response = await api.login(input);
     storeToken(response.token);
     writeUser(response.user);
+    const binding = response.binding ?? null;
+    if (binding) {
+      writeBind(binding, response.user.id);
+    } else {
+      removeBind();
+    }
     set({
       token: response.token,
       user: response.user,
-      bound: readBind(response.user.id),
+      bound: binding,
     });
   },
 
@@ -174,7 +182,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     set({
       token: response.token,
       user: response.user,
-      bound: readBind(response.user.id),
+      bound: response.binding ?? null,
     });
   },
 
@@ -197,5 +205,25 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   clearBound: () => {
     removeBind();
     set({ bound: null });
+  },
+
+  refreshBinding: async () => {
+    const userId = get().user?.id;
+    if (!get().token || userId === undefined) {
+      return;
+    }
+    try {
+      const status = await api.bindStatus();
+      if (status.bound && status.qq && status.verifiedAt) {
+        const record = { qq: status.qq, verifiedAt: status.verifiedAt };
+        writeBind(record, userId);
+        set({ bound: record });
+        return;
+      }
+      removeBind();
+      set({ bound: null });
+    } catch {
+      // 网络异常时保留本地缓存，避免短暂离线导致界面闪回未绑定。
+    }
   },
 }));

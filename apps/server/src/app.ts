@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
+import httpProxy from "@fastify/http-proxy";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { BOT_QQ, healthResponseSchema, SERVICE_VERSION } from "@autonotice/shared";
@@ -13,6 +14,7 @@ import { registerBindRoutes } from "./routes/bind.js";
 import { registerScheduleRoutes } from "./routes/schedules.js";
 import { registerGroupRoutes } from "./routes/groups.js";
 import { registerAdminRoutes } from "./routes/admin.js";
+import { registerAdminOpsRoutes } from "./routes/admin-ops.js";
 import { seedSkills } from "./skills/registry.js";
 import { OneBotClient } from "./onebot/client.js";
 import { registerOneBotWs } from "./onebot/ws.js";
@@ -28,6 +30,7 @@ import { fireEventTriggers, startTriggerScheduler } from "./triggers/executor.js
 import { AdminChatHub } from "./admin/chat-hub.js";
 import { registerAdminChatRoutes } from "./admin/chat-routes.js";
 import { ensureGroup, linkUserGroup, refreshGroupInfo } from "./services/groups.js";
+import { ensureAdmin } from "./services/admin.js";
 
 /**
  * 装配 Fastify 实例。路由层只做：鉴权 → zod 校验 → 调服务 → 返回（§4.4）。
@@ -51,6 +54,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
 
   const { db, sqlite } = createDatabase(config.databasePath);
   seedSkills(db);
+  ensureAdmin(db, config.admin.username, config.admin.password);
   app.addHook("onClose", async () => {
     sqlite.close();
   });
@@ -126,6 +130,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   registerGroupRoutes(app, { db, onebot });
   registerScheduleRoutes(app, { db });
   registerAdminRoutes(app, { db, config, onebot });
+  registerAdminOpsRoutes(app, { db, config, onebot });
   adminChatHub.registerRoute(app);
   registerAdminChatRoutes(app, { db, onebot, hub: adminChatHub, bot });
   hub.registerRoute(app);
@@ -137,6 +142,18 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     logger: app.log,
     onPrivateMessage: bot.onPrivateMessage,
   });
+
+  // NapCat WebUI 反向代理：云安全组只放行 8080，这里把 /webui 与 NapCat 的 /api、/auth
+  // 透明转发到 napcat:6099，管理员即可在后台直接打开 NapCat 面板处理 QQ 风控/重登。
+  // /api/v1/* 的静态路由优先级高于该通配代理，不会受影响。
+  for (const prefix of ["/webui", "/api", "/auth"]) {
+    await app.register(httpProxy, {
+      upstream: config.napcat.upstream,
+      prefix,
+      rewritePrefix: prefix,
+      websocket: true,
+    });
+  }
 
   app.addHook("onSend", async (_request, reply, payload) => {
     reply.header("x-content-type-options", "nosniff");

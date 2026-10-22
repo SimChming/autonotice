@@ -626,4 +626,10 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-22 v2.2.0 多请求模式：每次 LLM API 调用只输出一条 reply；发送后把该条内容作为 assistant 消息回填上下文，下一次 API 调用能看到自己刚说过的话；移除 followups，最多 5 轮、每轮 1 条、单轮最多 3 条，保留跨轮归一化去重，修复连续重复刷屏。
 - 2026-10-22 v2.2.0 群聊上下文：`messages` 表新增 `sender_name`（migration 0004），入群消息记录发送者昵称，机器人自己的发言也写入消息表；每次对话注入最近 15 条群消息（单条截断 200 字，含未 @ 机器人的消息），prompt 要求只回应最新消息、不要逐条回复旧消息。
 - 2026-10-22 v2.2.0 联网搜索：新增内置技能 `tool.web.search`（handler `web.search`，permissions=all），通过必应中国 RSS（无需 API Key）返回标题/链接/摘要；prompt 要求遇到未知名词先搜再答，搜索结果视为不受信任的外部文本；主人给完整回答，非主人只给公开摘要并继续遵守隐私硬规则。
+- 2026-10-22 v2.2.7 品牌与图标：所有端（Web/桌面/Android）统一使用 `icon.ico`；应用名与页面 title 从「深海日程管家」改为「Autonotice 2.2.7」，Tauri productName/window title、Capacitor appName、Android app_name 同步；Web 增加 `/favicon.ico`。
+- 2026-10-22 v2.2.7 绑定持久化：`/auth/login` 与 `/auth/register` 响应新增 `binding`，客户端登录即写入本地缓存，应用启动后再调用 `/bind/status` 同步；换端登录不再需要手动重绑。
+- 2026-10-22 v2.2.7 口令安全：管理员口令改为 scrypt 哈希存入 `admins` 表（启动时由 `.env` 引导写入/轮换），登录校验哈希；普通用户口令原本即为 scrypt 哈希。
+- 2026-10-22 v2.2.7 运维后台：新增 `/admin/ops`（NapCat 入口、OneBot 登录信息/版本、WebUI Token）与 `/admin/shell`（容器内命令执行，60 秒超时，写入 `admin_audit`）；由于云安全组只放行 8080，`/webui`、NapCat 的 `/api` 与 `/auth` 由 Fastify 反代到 `napcat:6099`；镜像内置 docker/docker compose，容器挂载 `docker.sock` 与 `/opt/autonotice`，可直接做容器运维。
+- 2026-10-22 v2.2.7 管理入口：用户端 Web/桌面/手机在检测到管理员 token 后显示「管理」选项卡，进入 `/admin` 管理控制台；登录页保留「管理员入口」。
+- 2026-10-22 v2.2.7 开机自启：新增 `deploy/autonotice.service`（systemd oneshot，`docker compose up -d`），已在服务器 `enable --now`，Docker/containerd 均为 enabled，重启后整套 Autonotice + NapCat 自动拉起。
 

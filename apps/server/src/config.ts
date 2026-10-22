@@ -22,6 +22,9 @@ const envSchema = z.object({
   ONEBOT_ACCESS_TOKEN: z.string().default(""),
   BIND_GROUP_ID: z.string().regex(/^\d+$/).default("1130297603"),
   BIND_CODE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+  NAPCAT_UPSTREAM: z.string().default("http://napcat:6099"),
+  NAPCAT_WEBUI_CONFIG: z.string().default("/app/napcat-webui.json"),
+  NAPCAT_ACCOUNT: z.string().default("3754609823"),
 });
 
 export interface Config {
@@ -50,6 +53,11 @@ export interface Config {
   admin: {
     username: string;
     password: string;
+  };
+  napcat: {
+    upstream: string;
+    webuiConfigPath: string;
+    account: string;
   };
 }
 
@@ -89,6 +97,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     admin: {
       username: value.ADMIN_USERNAME,
       password: value.ADMIN_PASSWORD,
+    },
+    napcat: {
+      upstream: value.NAPCAT_UPSTREAM,
+      webuiConfigPath: value.NAPCAT_WEBUI_CONFIG,
+      account: value.NAPCAT_ACCOUNT,
     },
   };
 }

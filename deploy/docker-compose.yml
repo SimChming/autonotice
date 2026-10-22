@@ -8,6 +8,11 @@ services:
     env_file: .env
     volumes:
       - "./data:/app/data"
+      # 管理员 Shell：通过 docker.sock 管理整个 Autonotice/NapCat 栈
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "/opt/autonotice:/opt/autonotice"
+      # NapCat WebUI token（只读），用于后台「运维」页一键登录
+      - "./napcat/config/webui.json:/app/napcat-webui.json:ro"
     depends_on:
       - napcat
     mem_limit: 512m

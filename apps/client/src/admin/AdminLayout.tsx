@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { SERVICE_VERSION } from "@autonotice/shared";
 import { LogoutIcon, WhaleMark } from "../components/Icons";
 import { ToastHost, type ToastMessage } from "../components/Toast";
 
@@ -22,6 +23,8 @@ const NAV_ITEMS: AdminNavItem[] = [
   { to: "/admin/models", label: "模型" },
   { to: "/admin/users", label: "用户" },
   { to: "/admin/chat", label: "聊天" },
+  { to: "/admin/ops", label: "运维" },
+  { to: "/admin/shell", label: "Shell" },
 ];
 
 function AdminBrand() {
@@ -31,7 +34,7 @@ function AdminBrand() {
         <WhaleMark />
       </span>
       <span className="admin-brand__text">
-        <strong>Autonotice</strong>
+        <strong>Autonotice {SERVICE_VERSION}</strong>
         <small>管理控制台</small>
       </span>
     </div>
@@ -115,7 +118,7 @@ export function AdminLayout({ onLogout }: { onLogout: () => void }) {
             <span className="brand__mark admin-brand__mark">
               <WhaleMark />
             </span>
-            <strong>Autonotice 管理</strong>
+            <strong>Autonotice {SERVICE_VERSION} 管理</strong>
           </div>
 
           <nav className="admin-tabs" aria-label="管理后台导航">

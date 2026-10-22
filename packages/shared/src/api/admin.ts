@@ -87,3 +87,40 @@ export const adminMemoryUpdateSchema = z.object({
 });
 
 export type AdminMemoryUpdate = z.infer<typeof adminMemoryUpdateSchema>;
+
+/** 运维页：NapCat 入口、OneBot 实时状态与服务运行信息。 */
+export const adminOpsResponseSchema = z.object({
+  service: z.object({
+    version: z.string(),
+    uptime: z.number(),
+    onebotConnected: z.boolean(),
+  }),
+  onebot: z.object({
+    selfId: z.string().nullable(),
+    nickname: z.string().nullable(),
+    appVersion: z.string().nullable(),
+    protocolVersion: z.string().nullable(),
+  }),
+  napcat: z.object({
+    webuiPath: z.string(),
+    account: z.string(),
+    container: z.string(),
+    webuiToken: z.string(),
+  }),
+});
+
+export type AdminOpsResponse = z.infer<typeof adminOpsResponseSchema>;
+
+/** 管理员 Shell：在服务端容器内执行命令。 */
+export const adminShellRequestSchema = z.object({
+  command: z.string().trim().min(1, "请输入命令").max(2000, "命令过长"),
+});
+
+export type AdminShellRequest = z.infer<typeof adminShellRequestSchema>;
+
+export const adminShellResponseSchema = z.object({
+  ok: z.boolean(),
+  output: z.string(),
+});
+
+export type AdminShellResponse = z.infer<typeof adminShellResponseSchema>;

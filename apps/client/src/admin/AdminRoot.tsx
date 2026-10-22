@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { SERVICE_VERSION } from "@autonotice/shared";
 import { WhaleMark } from "../components/Icons";
 import {
   ADMIN_TOKEN_KEY,
@@ -51,7 +52,7 @@ function AdminLoginPage({ onLoggedIn }: AdminLoginPageProps) {
             <WhaleMark />
           </span>
           <span className="auth-brand__text">
-            <strong>Autonotice</strong>
+            <strong>Autonotice {SERVICE_VERSION}</strong>
             <small>Admin Console</small>
           </span>
         </div>

@@ -34,6 +34,10 @@ FROM node:20-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /repo
 
+# 管理员 Shell 需要 docker / docker compose 才能在容器内做整套服务运维。
+COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker:27-cli /usr/local/libexec/docker/cli-plugins/ /usr/local/libexec/docker/cli-plugins/
+
 # 保留 pnpm 的 /repo 目录布局，node_modules 内的相对符号链接才能正确解析
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/packages/shared ./packages/shared

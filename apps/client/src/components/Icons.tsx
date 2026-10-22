@@ -28,7 +28,7 @@ function SvgIcon({ children, className, viewBox = "0 0 24 24", filled = false }:
   );
 }
 
-/** 简洁的鲸鱼侧影：品牌标识，也是深海主题的视觉锚点。 */
+/** 简洁的鲸鱼侧影：品牌标识，也是深色主题的视觉锚点。 */
 export function WhaleMark({ className }: IconProps) {
   return (
     <SvgIcon className={className} viewBox="0 0 48 48" filled>
@@ -158,6 +158,36 @@ export function ArrowRightIcon({ className }: IconProps) {
   return (
     <SvgIcon className={className}>
       <path d="M5 12h14M14 6.5l5.5 5.5-5.5 5.5" />
+    </SvgIcon>
+  );
+}
+
+/** 管理后台：盾牌。 */
+export function ShieldIcon({ className }: IconProps) {
+  return (
+    <SvgIcon className={className}>
+      <path d="M12 3.2 19 6v5.4c0 4.4-2.9 7.6-7 9.4-4.1-1.8-7-5-7-9.4V6Z" />
+      <path d="m9.2 11.8 1.9 1.9 3.7-4" />
+    </SvgIcon>
+  );
+}
+
+/** Shell：终端窗口。 */
+export function TerminalIcon({ className }: IconProps) {
+  return (
+    <SvgIcon className={className}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.6" />
+      <path d="m7.2 9 2.6 3-2.6 3M12.4 15h4.4" />
+    </SvgIcon>
+  );
+}
+
+/** 外部链接：从后台打开 NapCat 等独立页面。 */
+export function ExternalIcon({ className }: IconProps) {
+  return (
+    <SvgIcon className={className}>
+      <path d="M13.5 4.5H19v5.5M19 4.5 11 12.5" />
+      <path d="M18 14.2v3.3A2.5 2.5 0 0 1 15.5 20h-9A2.5 2.5 0 0 1 4 17.5v-9A2.5 2.5 0 0 1 6.5 6h3.2" />
     </SvgIcon>
   );
 }

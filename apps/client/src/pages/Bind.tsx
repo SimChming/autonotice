@@ -169,7 +169,7 @@ export function BindPage() {
               </Link>
             </div>
             <p className="panel-note">
-              绑定状态记录在本机。若更换设备，请重新完成一次绑定确认。
+              绑定关系保存在服务器，换设备登录同一账号会自动同步，无需重新绑定。
             </p>
           </>
         ) : (

@@ -12,8 +12,10 @@ import { useAuthStore } from "./stores/auth";
 import { AdminRoot } from "./admin/AdminRoot";
 import { AdminChatPage } from "./admin/pages/AdminChat";
 import { AdminModelsPage } from "./admin/pages/AdminModels";
+import { AdminOpsPage } from "./admin/pages/AdminOps";
 import { AdminOverviewPage } from "./admin/pages/AdminOverview";
 import { AdminPromptPage } from "./admin/pages/AdminPrompt";
+import { AdminShellPage } from "./admin/pages/AdminShell";
 import { AdminSkillsPage } from "./admin/pages/AdminSkills";
 import { AdminUsersPage } from "./admin/pages/AdminUsers";
 
@@ -34,8 +36,17 @@ function RootRedirect() {
 
 export function App() {
   const logout = useAuthStore((state) => state.logout);
+  const token = useAuthStore((state) => state.token);
+  const refreshBinding = useAuthStore((state) => state.refreshBinding);
   // 原生壳（Tauri file:// / Capacitor http://localhost）用 hash 路由，避免刷新丢页。
   const Router = isNativeShell() ? HashRouter : BrowserRouter;
+
+  useEffect(() => {
+    // 绑定关系保存在服务端：任意设备登录后自动同步，无需手动重绑。
+    if (token) {
+      void refreshBinding();
+    }
+  }, [token, refreshBinding]);
 
   useEffect(() => {
     // API 401 与 WS 鉴权失败共用同一个事件，避免各页面重复处理。
@@ -78,6 +89,8 @@ export function App() {
           <Route path="models" element={<AdminModelsPage />} />
           <Route path="users" element={<AdminUsersPage />} />
           <Route path="chat" element={<AdminChatPage />} />
+          <Route path="ops" element={<AdminOpsPage />} />
+          <Route path="shell" element={<AdminShellPage />} />
         </Route>
         <Route path="*" element={<RootRedirect />} />
       </Routes>

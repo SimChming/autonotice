@@ -21,13 +21,20 @@ export const loginRequestSchema = z.object({
 
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 
-/** 登录/注册成功响应。 */
+/** 登录/注册成功响应。binding 由服务端返回，换端登录无需重新绑定。 */
 export const authResponseSchema = z.object({
   token: z.string(),
   user: z.object({
     id: z.number().int().positive(),
     username: z.string(),
   }),
+  binding: z
+    .object({
+      qq: z.string(),
+      verifiedAt: z.string(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export type AuthResponse = z.infer<typeof authResponseSchema>;

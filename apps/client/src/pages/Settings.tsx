@@ -78,7 +78,7 @@ export function SettingsPage() {
             </Link>
           </div>
         )}
-        <p className="panel-note">绑定状态保存在本机；更换设备后需要重新完成一次绑定确认。</p>
+        <p className="panel-note">绑定关系保存在服务器；换设备登录同一账号会自动同步。</p>
       </section>
 
       <section className="panel" aria-labelledby="settings-session">

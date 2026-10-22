@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { count, desc, eq } from "drizzle-orm";
 import {
@@ -26,17 +25,12 @@ import { getRuntimeLlm, maskKey } from "../llm/runtime.js";
 import { getActivePersona, getSetting, listSkills, setSetting, toManifest } from "../skills/registry.js";
 import { SUPPORTED_HANDLERS } from "../skills/handlers.js";
 import { embedText } from "../bot/memory.js";
+import { verifyAdmin } from "../services/admin.js";
 
 interface AdminRouteOptions {
   db: Db;
   config: Config;
   onebot: OneBotClient;
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 const PROMPT_OVERRIDE_KEY = "prompt.persona_override";
@@ -82,10 +76,7 @@ export function registerAdminRoutes(app: FastifyInstance, { db, config, onebot }
     if (!parsed.success) {
       return fail(reply, 400, "invalid_request", "用户名或密码格式不正确");
     }
-    if (
-      !safeEqual(parsed.data.username, config.admin.username) ||
-      !safeEqual(parsed.data.password, config.admin.password)
-    ) {
+    if (!verifyAdmin(db, parsed.data.username, parsed.data.password)) {
       return fail(reply, 401, "invalid_credentials", "管理员账号或密码错误");
     }
 

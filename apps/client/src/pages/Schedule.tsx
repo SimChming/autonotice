@@ -187,7 +187,7 @@ export function SchedulePage() {
             title={filter === "pending" ? "没有待办日程" : "这个筛选下没有日程"}
             description={
               filter === "pending"
-                ? "所有日程都已完成，去深海透口气吧。"
+                ? "所有日程都已完成，去休息一会儿吧。"
                 : "切换到其他筛选，看看别的日程安排。"
             }
           />

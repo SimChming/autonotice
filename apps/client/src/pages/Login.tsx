@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { SERVICE_VERSION } from "@autonotice/shared";
 import { useAuthStore } from "../stores/auth";
 import { WhaleMark } from "../components/Icons";
 
@@ -78,13 +79,13 @@ export function LoginPage() {
             <WhaleMark />
           </span>
           <span className="auth-brand__text">
-            <strong>Autonotice</strong>
-            <small>深海日程管家</small>
+            <strong>Autonotice {SERVICE_VERSION}</strong>
+            <small>群消息 · 日程 · 提醒</small>
           </span>
         </div>
 
         <p className="eyebrow">WELCOME ABOARD</p>
-        <h1 id="auth-title">{mode === "login" ? "回到你的日程深海" : "创建一枚新账号"}</h1>
+        <h1 id="auth-title">{mode === "login" ? "回到你的 Autonotice" : "创建一枚新账号"}</h1>
         <p className="auth-subtitle">
           {mode === "login"
             ? "群消息里的时间与任务已经替你收好，登录即可查看。"
@@ -165,11 +166,14 @@ export function LoginPage() {
 
           <button type="submit" className="btn btn--primary btn--block" disabled={loading}>
             {loading ? <span className="spinner" aria-hidden="true" /> : null}
-            {loading ? "处理中…" : mode === "login" ? "进入深海" : "创建账号"}
+            {loading ? "处理中…" : mode === "login" ? "进入 Autonotice" : "创建账号"}
           </button>
         </form>
 
         <p className="auth-foot">登录后即可查看群消息生成的日程与多端提醒。</p>
+        <p className="auth-foot">
+          <Link to="/admin">管理员入口</Link>
+        </p>
       </section>
     </div>
   );
