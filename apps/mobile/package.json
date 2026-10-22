@@ -1,6 +1,6 @@
 {
   "name": "@autonotice/mobile",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "private": true,
   "description": "Autonotice Android 壳（Capacitor 6，加载 apps/client/dist）",
   "scripts": {

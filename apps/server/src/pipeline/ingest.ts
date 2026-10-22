@@ -40,6 +40,7 @@ export async function ingestMessage(deps: IngestDeps, message: NormalizedMessage
     .values({
       groupId: message.groupId,
       senderQq: message.senderQq,
+      senderName: message.senderName,
       text: message.text,
       rawJson: JSON.stringify(message.raw),
       msgTime: message.msgTime,

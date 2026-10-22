@@ -9,14 +9,14 @@ import type { LlmClient, LlmMessage } from "../llm/client.js";
 import type { NotifyHub } from "../notify/hub.js";
 import type { OneBotClient } from "../onebot/client.js";
 import { buildSystemPrompt } from "./persona.js";
-import { appendHistory, loadRecentHistory, loadSummary, maybeSummarize } from "./history.js";
+import { appendHistory, loadGroupContext, loadRecentHistory, loadSummary, maybeSummarize } from "./history.js";
 import { recallMemories, saveMemory } from "./memory.js";
 import { runShell } from "./shell.js";
 import { buildInstructionPrompt, buildSkillsPrompt, getActivePersona, getEnabledSkills, getSetting } from "../skills/registry.js";
 import { executeSkill, SkillDeniedError } from "../skills/handlers.js";
 
-const MAX_ROUNDS = 10;
-const MAX_SENDS_PER_TURN = 4;
+const MAX_ROUNDS = 5;
+const MAX_SENDS_PER_TURN = 3;
 const RATE_WINDOW_MS = 5 * 60 * 1000;
 const RATE_LIMIT = 3;
 
@@ -154,6 +154,17 @@ export class BotChat {
 
     // 先读取历史（此时不含本条消息），避免同一条消息在 prompt 里出现两次。
     const history = loadRecentHistory(db, input.sessionKey);
+    // 群聊全量上下文：包含未 @ 机器人、甚至未绑定用户的消息。
+    const groupContext = input.groupId ? loadGroupContext(db, input.groupId, 15) : undefined;
+    if (groupContext?.length) {
+      const last = groupContext[groupContext.length - 1];
+      const currentLabel = input.senderName
+        ? `${input.senderName}(QQ${input.senderQq})`
+        : `QQ${input.senderQq}`;
+      if (last && last.text === input.text.slice(0, 200) && last.senderLabel === currentLabel) {
+        groupContext.pop();
+      }
+    }
 
     let memories: string[] = [];
     try {
@@ -171,6 +182,7 @@ export class BotChat {
         capabilities: "图片/表情/语音/视频/文件/撤回/@全体 全部开启",
         memoryFragments: memories,
         history,
+        groupContext,
         summary: loadSummary(db, input.sessionKey),
         nowIso: new Date().toISOString(),
         personaPrompt: promptOverride || (persona.id === "persona.whale" ? undefined : persona.prompt),
@@ -233,12 +245,13 @@ export class BotChat {
         memory = contract.memory;
       }
       const sendsBefore = outgoing.length;
-      if (contract.reply.trim()) {
-        await sendOnce(contract.reply);
+      const replyText = contract.reply.trim();
+      if (replyText) {
+        await sendOnce(replyText);
       }
-      for (const extra of (contract.followups ?? []).filter((item) => item.trim()).slice(0, 2)) {
-        await new Promise((resolve) => setTimeout(resolve, 600));
-        await sendOnce(extra);
+      if (outgoing.length > sendsBefore) {
+        // 每次发送后把这句话放回上下文：下一次 API 调用能看到自己刚说过什么，避免重复。
+        messages.push({ role: "assistant", content: replyText });
       }
 
       let toolResult: string | null = null;
@@ -303,7 +316,7 @@ export class BotChat {
         messages.push({
           role: "user",
           content:
-            "继续完成你刚才未完成的工作，不要等用户再发消息；可以继续调用技能或 shell。只输出新增的实质内容，不要重复已经说过的话。全部完成后给出最终结论，并把 continue 设为 false。",
+            "系统会再次调用一次 API。只输出新增的实质内容，并把刚才已经发过的话当作上下文，禁止重复；完成后把 continue 设为 false。",
         });
         continue;
       }

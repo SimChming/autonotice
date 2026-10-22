@@ -1,9 +1,11 @@
 import type { FastifyBaseLogger } from "fastify";
+import { BOT_QQ } from "@autonotice/shared";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
 import type { LlmClient } from "../llm/client.js";
 import type { NotifyHub } from "../notify/hub.js";
 import type { OneBotClient } from "../onebot/client.js";
+import { messages } from "../db/schema.js";
 import type { NormalizedMessage, NormalizedPrivateMessage } from "../onebot/normalize.js";
 import { BotChat } from "./chat.js";
 
@@ -32,7 +34,25 @@ export function createBotHandlers(options: HandlerOptions) {
         senderName: message.senderName,
         text: message.text || "（在群里 @ 了你）",
         groupId: message.groupId,
-        send: (text) => options.onebot.sendGroupMsg(message.groupId, text),
+        send: async (text) => {
+          await options.onebot.sendGroupMsg(message.groupId, text);
+          // 机器人自己的发言也写入群消息表，供后续"近期群聊上下文"使用。
+          try {
+            options.db
+              .insert(messages)
+              .values({
+                groupId: message.groupId,
+                senderQq: BOT_QQ,
+                senderName: "鲸鱼娘",
+                text,
+                rawJson: "{}",
+                msgTime: Date.now(),
+              })
+              .run();
+          } catch {
+            // 写入失败不影响发送
+          }
+        },
       });
     },
 

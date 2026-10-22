@@ -140,6 +140,25 @@ const BUILTIN_SKILLS: Array<Omit<CreateSkillRequest, "version"> & { version?: st
     },
   },
   {
+    id: "tool.web.search",
+    name: "联网搜索",
+    description:
+      "遇到不认识的名词、作品、人物、新闻或不确定的事实时，先联网搜索再回答。params: query=搜索关键词，limit=结果数（1-8，默认 5）。",
+    type: "tool",
+    enabled: true,
+    prompt: "",
+    handler: "web.search",
+    permissions: "all",
+    paramsSchema: {
+      type: "object",
+      required: ["query"],
+      properties: {
+        query: { type: "string", description: "搜索关键词" },
+        limit: { type: "number", description: "返回结果数量，默认 5" },
+      },
+    },
+  },
+  {
     id: "tool.skill.manage",
     name: "技能自迭代",
     description:

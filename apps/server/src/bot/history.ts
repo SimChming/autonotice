@@ -1,7 +1,8 @@
 import { desc, eq, gt } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
+import { BOT_QQ } from "@autonotice/shared";
 import type { Db } from "../db/client.js";
-import { botHistory, botSummary } from "../db/schema.js";
+import { botHistory, botSummary, messages } from "../db/schema.js";
 import type { LlmClient } from "../llm/client.js";
 
 const RECENT_LIMIT = 12;
@@ -54,6 +55,35 @@ export function loadRecentHistory(db: Db, sessionKey: string): HistoryEntry[] {
 
 export function loadSummary(db: Db, sessionKey: string): string | null {
   return db.select().from(botSummary).where(eq(botSummary.sessionKey, sessionKey)).get()?.summary ?? null;
+}
+
+export interface GroupContextEntry {
+  senderLabel: string;
+  text: string;
+  at: string;
+}
+
+/** 群聊全量上下文：最近 N 条消息（含未 @ 机器人的消息与机器人自己的发言）。 */
+export function loadGroupContext(db: Db, groupId: string, limit = 15): GroupContextEntry[] {
+  const rows = db
+    .select()
+    .from(messages)
+    .where(eq(messages.groupId, groupId))
+    .orderBy(desc(messages.id))
+    .limit(limit)
+    .all()
+    .reverse();
+
+  return rows.map((row) => ({
+    senderLabel:
+      row.senderQq === BOT_QQ
+        ? "鲸鱼娘"
+        : row.senderName
+          ? `${row.senderName}(QQ${row.senderQq})`
+          : `QQ${row.senderQq}`,
+    text: row.text.slice(0, 200),
+    at: new Date(row.msgTime).toISOString(),
+  }));
 }
 
 /** 未摘要历史超过阈值时压缩成 ≤500 字摘要（§4.5，单层摘要）。 */

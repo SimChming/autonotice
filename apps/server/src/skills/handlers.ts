@@ -7,6 +7,7 @@ import type { NotifyHub } from "../notify/hub.js";
 import { triggers } from "../db/schema.js";
 import type { OneBotClient } from "../onebot/client.js";
 import { fetchBinary } from "../pipeline/fetcher.js";
+import { searchWeb } from "../services/websearch.js";
 import { getActivePersona, listSkills, setActivePersona } from "./registry.js";
 import { skills as skillsTable } from "../db/schema.js";
 
@@ -31,6 +32,7 @@ export const SUPPORTED_HANDLERS = [
   { id: "trigger.list", description: "列出自己的触发器" },
   { id: "trigger.cancel", description: "取消触发器（params.id）" },
   { id: "skill.manage", description: "技能自迭代：list/update/create/delete（仅主人）" },
+  { id: "web.search", description: "联网搜索（params.query 关键词，params.limit 可选）" },
 ] as const;
 
 export class SkillDeniedError extends Error {}
@@ -297,6 +299,15 @@ export async function executeSkill(
       }
 
       return `未知 skill.manage 动作 ${action}`;
+    }
+
+    case "web.search": {
+      const query = String(params.query ?? "").trim();
+      if (!query) {
+        return "缺少搜索关键词 query";
+      }
+      const limit = Number(params.limit ?? 5);
+      return searchWeb(query, Number.isFinite(limit) ? limit : 5);
     }
 
     default:

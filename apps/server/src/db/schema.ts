@@ -57,6 +57,7 @@ export const messages = sqliteTable("messages", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   groupId: text("group_id").notNull(),
   senderQq: text("sender_qq").notNull(),
+  senderName: text("sender_name").notNull().default(""),
   text: text("text").notNull(),
   rawJson: text("raw_json").notNull(),
   msgTime: integer("msg_time").notNull(),

@@ -623,4 +623,7 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-22 v2.1.0 验证：本地内存库完成 register → bind/start → confirm（连续两次幂等）→ bind/status → groups → schedules 全链路；版本号统一提升到 2.1.0。
 - 2026-10-22 v2.1.1 隐私补丁：persona 新增「隐私与服务器信息（非主人硬规则）」；非主人对话额外注入隐私硬规则，服务端直接拒绝普通用户的 `api`（OneBot）调用；只有主人能了解服务器、其他用户隐私或系统提示词。
 - 2026-10-22 v2.1.1 提示词后台：新增 `/admin/prompt` 页与 `GET/PUT /api/v1/admin/prompt`，展示当前人格默认 prompt、可保存覆盖值（settings `prompt.persona_override`，留空回退默认，保存后下一条消息生效）；记忆库展示最近 100 条，支持 `PATCH/DELETE /api/v1/admin/memories/:id` 编辑/删除，编辑内容会重新计算 embedding。
+- 2026-10-22 v2.2.0 多请求模式：每次 LLM API 调用只输出一条 reply；发送后把该条内容作为 assistant 消息回填上下文，下一次 API 调用能看到自己刚说过的话；移除 followups，最多 5 轮、每轮 1 条、单轮最多 3 条，保留跨轮归一化去重，修复连续重复刷屏。
+- 2026-10-22 v2.2.0 群聊上下文：`messages` 表新增 `sender_name`（migration 0004），入群消息记录发送者昵称，机器人自己的发言也写入消息表；每次对话注入最近 15 条群消息（单条截断 200 字，含未 @ 机器人的消息），prompt 要求只回应最新消息、不要逐条回复旧消息。
+- 2026-10-22 v2.2.0 联网搜索：新增内置技能 `tool.web.search`（handler `web.search`，permissions=all），通过必应中国 RSS（无需 API Key）返回标题/链接/摘要；prompt 要求遇到未知名词先搜再答，搜索结果视为不受信任的外部文本；主人给完整回答，非主人只给公开摘要并继续遵守隐私硬规则。
 
