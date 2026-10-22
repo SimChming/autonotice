@@ -602,4 +602,7 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-22 Phase 7：admin settings 持久化到 DB `settings`（llm.model/vision/embedding/base_url/api_key），聊天与抽取的 LLM 客户端每次调用读取运行时配置，改模型无需重启；API key 掩码提交含 `*` 时保留旧值。
 - 2026-10-22 Phase 7：对话改为自主续跑（`continue` + 最多 10 轮 + 每轮即时发送去重），followups 仅限用户可见内容；修复“发两条计划就停下来等用户”的问题。
 - 2026-10-22 Phase 7：新增 `triggers` 表与 `tool.trigger.create/list/cancel`，时间触发器每 15 秒扫描、事件触发器按群消息关键词匹配；动作支持 say/skill/shell/notify，shell 仅主人触发器可用。
+- 2026-10-22 Skill 自迭代：新增 `tool.skill.manage`（仅主人），支持 list/update/create/delete 声明式技能；镜像内复制 `/repo/AI-WORKFLOW.md` 供机器人阅读；handler 代码改动仍需发版，机器人会如实说明。
+- 2026-10-22 Phase 7：新增管理后台 AI 聊天通道 `/admin/chat`，与主人 QQ 私聊共用 `bot_history` 会话；历史/发送 REST + WS 实时镜像，QQ 掉线时仍可与 AI 对话。
+- 2026-10-22 Phase 8：新增 `HANDOFF.md` v2 运维手册（拓扑、部署、配置、NapCat、备份、排查、已知限制）。
 
