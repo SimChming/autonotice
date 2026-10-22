@@ -632,4 +632,5 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-22 v2.2.7 运维后台：新增 `/admin/ops`（NapCat 入口、OneBot 登录信息/版本、WebUI Token）与 `/admin/shell`（容器内命令执行，60 秒超时，写入 `admin_audit`）；由于云安全组只放行 8080，`/webui`、NapCat 的 `/api` 与 `/auth` 由 Fastify 反代到 `napcat:6099`；镜像内置 docker/docker compose，容器挂载 `docker.sock` 与 `/opt/autonotice`，可直接做容器运维。
 - 2026-10-22 v2.2.7 管理入口：用户端 Web/桌面/手机在检测到管理员 token 后显示「管理」选项卡，进入 `/admin` 管理控制台；登录页保留「管理员入口」。
 - 2026-10-22 v2.2.7 开机自启：新增 `deploy/autonotice.service`（systemd oneshot，`docker compose up -d`），已在服务器 `enable --now`，Docker/containerd 均为 enabled，重启后整套 Autonotice + NapCat 自动拉起。
+- 2026-10-22 v2.2.7 热修：`@fastify/http-proxy` 的 `websocket` 选项会接管全局 upgrade 事件，与 `@fastify/websocket` 的 `/api/v1/ws` 冲突并触发 `ERR_HTTP_SOCKET_ASSIGNED` 导致服务重启；已关闭该选项（NapCat 面板走 HTTP 反代即可），线上已回归验证客户端 WS 正常且进程稳定。
 
