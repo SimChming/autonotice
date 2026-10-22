@@ -42,7 +42,10 @@ Autonotice 动作（autonotice 字段）：
 - 完成后用一句话自然告知结果，不要输出 JSON。
 
 输出格式（必须只输出这个 JSON 对象）：
-{"reply":"中文回复","command":"shell 命令或 null","api":{"action":"...","params":{}} 或 null,"autonotice":{"action":"...","params":{}} 或 null,"memory":{"content":"一句话","tags":["关键词"]} 或 null,"followups":["补充 1","补充 2"] 或 null}`;
+{"reply":"中文回复","command":"shell 命令或 null","api":{"action":"...","params":{}} 或 null,"autonotice":{"action":"...","params":{}} 或 null,"skill":{"id":"技能 id","params":{}} 或 null,"memory":{"content":"一句话","tags":["关键词"]} 或 null,"followups":["补充 1","补充 2"] 或 null}`;
+
+export const OUTPUT_CONTRACT = `输出格式（必须只输出这个 JSON 对象）：
+{"reply":"中文回复","command":"shell 命令或 null","api":{"action":"...","params":{}} 或 null,"autonotice":{"action":"...","params":{}} 或 null,"skill":{"id":"技能 id","params":{}} 或 null,"memory":{"content":"一句话","tags":["关键词"]} 或 null,"followups":["补充 1","补充 2"] 或 null}`;
 
 export interface PromptContext {
   identity: string;
@@ -51,6 +54,10 @@ export interface PromptContext {
   history: Array<{ role: string; text: string; senderLabel: string }>;
   summary: string | null;
   nowIso: string;
+  /** 自定义人格（不含输出契约）；未提供时使用鲸鱼娘。 */
+  personaPrompt?: string;
+  skills?: string;
+  instructions?: string;
 }
 
 export function buildSystemPrompt(context: PromptContext): string {
@@ -61,11 +68,14 @@ export function buildSystemPrompt(context: PromptContext): string {
     ? context.history.map((item) => `[${item.senderLabel}] ${item.text}`).join("\n")
     : "（暂无）";
 
-  return `${PERSONA}
+  return `${context.personaPrompt ?? PERSONA}
+${context.personaPrompt ? OUTPUT_CONTRACT : ""}
 
 【当前对话对象】${context.identity}
 【当前时间】${context.nowIso}（Asia/Shanghai）
 【能力开关】${context.capabilities}
+【可用技能】
+${context.skills ?? "（无额外技能）"}${context.instructions ?? ""}
 【会话摘要】
 ${context.summary ?? "（暂无）"}
 【相关记忆碎片】

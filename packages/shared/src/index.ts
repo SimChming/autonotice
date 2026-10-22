@@ -7,3 +7,4 @@ export * from "./api/health.js";
 export * from "./api/auth.js";
 export * from "./api/bind.js";
 export * from "./api/schedule.js";
+export * from "./api/skill.js";

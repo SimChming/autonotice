@@ -153,3 +153,20 @@ export const docFiles = sqliteTable("doc_files", {
   quotaDate: text("quota_date").notNull(),
   createdAt: integer("created_at").notNull(),
 });
+
+/** 可插拔技能：persona（人格）/ tool（LLM 可调用动作）/ instruction（附加提示词）。 */
+export const skills = sqliteTable("skills", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  type: text("type").notNull(),
+  enabled: integer("enabled").notNull().default(1),
+  prompt: text("prompt").notNull().default(""),
+  handler: text("handler"),
+  permissions: text("permissions").notNull().default("all"),
+  paramsSchema: text("params_schema").notNull().default("{}"),
+  version: text("version").notNull().default("1.0.0"),
+  builtin: integer("builtin").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});

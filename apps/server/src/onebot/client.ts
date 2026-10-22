@@ -91,4 +91,13 @@ export class OneBotClient {
       message: [{ type: "text", data: { text } }],
     });
   }
+
+  /** 发送原始 CQ 字符串（图片/表情等），供 skill 使用。 */
+  async sendGroupCq(groupId: string, message: string): Promise<void> {
+    await this.request("send_group_msg", { group_id: Number(groupId), message });
+  }
+
+  async sendPrivateCq(userId: string, message: string): Promise<void> {
+    await this.request("send_private_msg", { user_id: Number(userId), message });
+  }
 }

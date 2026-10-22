@@ -232,6 +232,36 @@ autonotice/                          # 仓库根（v2 分支）
 
 ***
 
+### 4.7 Skill 机制（可插拔能力，管理后台图形化）
+
+**目标**：把「模型能做什么」从主干代码里解耦成可启停、可增删的技能。后续新增 QQ 图片发送/识图、人格切换、资料检索等能力，只需注册 handler 与技能清单，不必改对话主干。
+
+**三类技能**
+
+| type        | 作用                                  | 例子                                   |
+| ----------- | ------------------------------------- | -------------------------------------- |
+| persona     | 替换机器人角色提示词（同一时间只生效一个） | persona.whale（鲸鱼娘）、persona.strict |
+| tool        | LLM 可调用动作，只允许内置 handler 白名单   | tool.image.send、tool.image.describe    |
+| instruction | 纯提示词增强，注入 system prompt           | 群规播报风格、回复长度限制                    |
+
+**存储**：`skills` 表保存清单（id/name/description/type/enabled/prompt/handler/permissions/params_schema/version/builtin）。内置技能由服务启动时 `seedSkills` 写入，**不可删除**（只能停用/改提示词/改描述）；自定义技能由后台增删改，`handler` 只能从白名单选择，**服务端绝不执行用户提交的代码**（无任意代码执行面）。
+
+**运行链路**
+
+1. `getEnabledSkills` 读取启用技能 → `buildSkillsPrompt` 生成【可用技能】注入 system prompt，`buildInstructionPrompt` 注入附加指令。
+2. 模型在 JSON 契约中输出 `"skill": {"id": "tool.image.send", "params": {...}}`；`executeSkill` 先按权限（owner / bound / all）硬校验，再查 handler 白名单执行，结果以 `[技能结果]` 回填上下文继续循环（≤6 轮）。
+3. 人格：`settings.persona.active` 指向某个 persona 技能；`tool.persona.switch`（仅主人）切换；`persona.whale` 使用代码内全文人格，自定义 persona 使用表中 prompt，并自动追加统一 JSON 输出契约。
+
+**权限硬规则**：owner 仅 QQ `3874095145`；bound 需已绑定 Autonotice 账号；即使模型被诱导，服务端仍按清单权限拒绝并回填拒绝原因。
+
+**内置 handler**：`image.send`（CQ 图片发送）、`image.describe`（`qwen3-vl-plus` 识图，5MB 上限 + SSRF 校验）、`persona.switch`、`persona.current`。
+
+**扩展方式**：新增能力 = 在 `apps/server/src/skills/handlers.ts` 注册 handler + 加入 `SUPPORTED_HANDLERS` + 种子一条内置技能；后台即可图形化启停与修改描述，无需改 `bot/chat.ts`。
+
+**管理 API**：见 §6 `/api/v1/admin/skills*`（管理后台图形页面在 Phase 7 实现）。
+
+***
+
 ## 5. 数据库 Schema（drizzle，全部新表）
 
 ```
@@ -255,6 +285,8 @@ admins(id, username UNIQUE, password_hash)
 admin_audit(id, admin_id, action, detail, created_at)
 agent_actions(id, session_key, action, params, result, created_at)  # 机器人 Autonotice 动作审计
 doc_files(id, user_id, kind, title, path, quota_date, created_at)   # 文档生成配额按 (user,日期) 计数
+skills(id PK, name, description, type, enabled, prompt, handler,   # 可插拔技能（§4.7）
+       permissions, params_schema, version, builtin, created_at, updated_at)
 ```
 
 ## 6. API 契约（zod 定义于 packages/shared/src/api/）
@@ -272,6 +304,8 @@ POST /api/v1/agent/:action                  → 外部 LLM 可调用的 Autonoti
 POST /api/v1/admin/login                    → 管理员 JWT（独立 scope）
 GET/PUT /api/v1/admin/settings              → 模型/密钥(掩码)/能力开关/限流 热更新
 GET/POST/DELETE /api/v1/admin/users         → QQ 用户与角色管理（owner/普通）
+GET/POST/PATCH/DELETE /api/v1/admin/skills  → 技能管理（内置不可删，handler 走白名单）
+GET  /api/v1/admin/skills/handlers          → 可用内置 handler 列表
 GET  /api/v1/admin/overview                 → 连接状态/配额/审计
 ```
 
@@ -370,6 +404,7 @@ GET  /api/v1/admin/overview                 → 连接状态/配额/审计
 **任务**
 
 - [ ] `bot/persona.ts`：从旧版 `server/internal/bot/prompt.go`（v1.0.3，GitHub main 分支）**全文迁移**人格与 JSON 契约（reply/command/api/autonotice/memory/segments/doc）
+- [x] persona 由 skill 机制承载：`persona.whale` 默认、`persona.strict` 备选，主人可经 `tool.persona.switch` 切换（§4.7）
 - [ ] `bot/chat.ts`：工具循环（≤6 轮：api → 结果回填继续；command 仅主人；都空则结束）；发送前 CQ 码按能力开关清洗；>1500 字分段时**以 CQ 码为原子边界切分**（图片/文件码绝不从中间切断）
 - [ ] `bot/memory.ts` + `bot/history.ts` + 摘要任务：按 §4.5 实现（embedding 用 dashscope text-embedding-v4，暴力余弦 top5）
 - [ ] `bot/shell.ts`：主人专属 bash 持久会话（cwd 保持、60s 超时、256KB 截断、`reset/重置` 重建、输出哨兵协议）
@@ -390,6 +425,7 @@ GET  /api/v1/admin/overview                 → 连接状态/配额/审计
 - [ ] `/api/v1/agent/*` 标准动作接口（供任意外部 LLM 调用：notify.send / client.alarm / schedule.\*）+ `agent_actions` 审计
 - [ ] 文档生成（xlsx/docx/pdf，配额默认 2/人/日，容器内装中文字体防 PDF 乱码）
 - [ ] admin 前端页（复用 client 路由 `/admin`，自适应三档）
+- [ ] 后台技能管理页：技能列表/启停/新增（persona/tool/instruction）/删除，handler 从白名单下拉选择（API 已就绪）
 
 **验收**：后台改模型 → 下一条机器人消息即用新模型（无需重启）；普通用户 token 访问 `/admin/*` 返回 403；主人从 QQ 侧发起可免密进后台；文档生成下载成功且配额生效。
 
@@ -520,4 +556,7 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-22 Phase 5：客户端已实现 login/bind/schedule/alerts/settings 五页 + 侧边栏/TabBar 自适应 + WS toast；浏览器实测注册→建日程→完成→刷新保持全部通过。
 - 2026-10-22 Phase 5：服务端新增 `/api/v1/schedules`（GET/POST/PATCH/DELETE）与 `/api/v1/alerts`，并通过 `@fastify/static` 同源托管 client 构建产物（SPA 回退 index.html）。
 - 2026-10-22 Phase 5：本机无 Android SDK 与 Rust/cargo，Capacitor/Tauri 原生壳暂未构建；一键排程页与平台通知分流留待后续。
+- 2026-10-22 Skill 机制：新增 `skills` 表与 `skills/registry.ts`，内置 persona.whale / persona.strict / image.send / image.describe / persona.switch / persona.current；自定义技能只允许声明式清单 + handler 白名单，服务端不执行用户代码。
+- 2026-10-22 Skill 机制：对话 JSON 契约新增 `skill` 字段；启用技能说明与附加指令注入 system prompt；人格由 `settings.persona.active` 决定，切换仅主人可用。
+- 2026-10-22 Skill 机制：管理 API 已上线（admin scope JWT + `/api/v1/admin/skills*`），图形化页面待 Phase 7；默认管理员账号取 `.env` 的 ADMIN_USERNAME/ADMIN_PASSWORD。
 

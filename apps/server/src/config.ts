@@ -13,6 +13,9 @@ const envSchema = z.object({
   LLM_API_KEY: z.string().default(""),
   LLM_MODEL: z.string().default("deepseek-v4.1-flash"),
   LLM_EMBEDDING_MODEL: z.string().default("text-embedding-v4"),
+  LLM_VISION_MODEL: z.string().default("qwen3-vl-plus"),
+  ADMIN_USERNAME: z.string().default("admin"),
+  ADMIN_PASSWORD: z.string().min(8).default("change-me-please"),
   DATABASE_PATH: z.string().default("./data/app.db"),
   JWT_SECRET: z.string().min(16).default("dev-only-insecure-secret-change-me"),
   ONEBOT_WS_PATH: z.string().startsWith("/").default("/onebot/v11/ws"),
@@ -42,6 +45,11 @@ export interface Config {
     apiKey: string;
     model: string;
     embeddingModel: string;
+    visionModel: string;
+  };
+  admin: {
+    username: string;
+    password: string;
   };
 }
 
@@ -76,6 +84,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       apiKey: value.LLM_API_KEY,
       model: value.LLM_MODEL,
       embeddingModel: value.LLM_EMBEDDING_MODEL,
+      visionModel: value.LLM_VISION_MODEL,
+    },
+    admin: {
+      username: value.ADMIN_USERNAME,
+      password: value.ADMIN_PASSWORD,
     },
   };
 }

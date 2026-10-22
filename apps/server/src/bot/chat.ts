@@ -12,6 +12,8 @@ import { buildSystemPrompt } from "./persona.js";
 import { appendHistory, loadRecentHistory, loadSummary, maybeSummarize } from "./history.js";
 import { recallMemories, saveMemory } from "./memory.js";
 import { runShell } from "./shell.js";
+import { buildInstructionPrompt, buildSkillsPrompt, getActivePersona, getEnabledSkills } from "../skills/registry.js";
+import { executeSkill, SkillDeniedError } from "../skills/handlers.js";
 
 const MAX_ROUNDS = 6;
 const RATE_WINDOW_MS = 5 * 60 * 1000;
@@ -26,6 +28,10 @@ const contractSchema = z.object({
     .optional(),
   autonotice: z
     .object({ action: z.string(), params: z.record(z.unknown()).default({}) })
+    .nullable()
+    .optional(),
+  skill: z
+    .object({ id: z.string(), params: z.record(z.unknown()).default({}) })
     .nullable()
     .optional(),
   memory: z
@@ -131,6 +137,8 @@ export class BotChat {
       logger.warn({ err: error }, "记忆召回失败");
     }
 
+    const persona = getActivePersona(db);
+    const enabledSkills = getEnabledSkills(db);
     const system = buildSystemPrompt({
       identity,
       capabilities: "图片/表情/语音/视频/文件/撤回/@全体 全部开启",
@@ -138,6 +146,9 @@ export class BotChat {
       history: loadRecentHistory(db, input.sessionKey),
       summary: loadSummary(db, input.sessionKey),
       nowIso: new Date().toISOString(),
+      personaPrompt: persona.id === "persona.whale" ? undefined : persona.prompt,
+      skills: buildSkillsPrompt(enabledSkills),
+      instructions: buildInstructionPrompt(enabledSkills),
     });
 
     const messages: LlmMessage[] = [
@@ -199,6 +210,33 @@ export class BotChat {
         }
       } else if (contract.autonotice) {
         toolResult = await this.runAutonotice(input, binding?.userId ?? null, contract.autonotice);
+      } else if (contract.skill) {
+        const manifest = enabledSkills.find(
+          (skill) => skill.id === contract?.skill?.id && skill.type === "tool",
+        );
+        if (!manifest) {
+          toolResult = "[技能结果] 技能不存在或未启用";
+        } else {
+          try {
+            const output = await executeSkill(manifest, contract.skill.params, {
+              db,
+              config,
+              onebot: this.deps.onebot,
+              logger,
+              qq: input.senderQq,
+              userId: binding?.userId ?? null,
+              groupId: input.groupId,
+              sessionKey: input.sessionKey,
+            });
+            toolResult = `[技能结果] ${output}`;
+          } catch (error) {
+            toolResult =
+              error instanceof SkillDeniedError
+                ? `[技能结果] ${error.message}`
+                : "[技能结果] 技能执行失败";
+            logger.warn({ err: error, skill: manifest.id }, "技能执行失败");
+          }
+        }
       }
 
       if (toolResult === null) {

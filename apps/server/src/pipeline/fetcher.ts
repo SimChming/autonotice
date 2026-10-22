@@ -139,3 +139,46 @@ export async function fetchUrl(rawUrl: string): Promise<FetchedPage> {
   }
   throw new Error("重定向次数过多");
 }
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/** 下载图片等二进制资源：同样走 SSRF 校验与重定向上限。 */
+export async function fetchBinary(url: string): Promise<{ contentType: string; data: Buffer }> {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("仅支持 http/https 链接");
+  }
+  await assertPublicHost(parsed.hostname);
+
+  const response = await fetch(parsed, {
+    headers: { "User-Agent": UA, Accept: "image/*,*/*;q=0.5" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    throw new Error(`下载失败 HTTP ${response.status}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("响应无正文");
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    total += value.byteLength;
+    if (total > MAX_IMAGE_BYTES) {
+      await reader.cancel();
+      throw new Error("图片超过 5MB 限制");
+    }
+    chunks.push(value);
+  }
+
+  return {
+    contentType: response.headers.get("content-type") ?? "application/octet-stream",
+    data: Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))),
+  };
+}

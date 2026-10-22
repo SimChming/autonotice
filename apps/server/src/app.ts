@@ -11,6 +11,8 @@ import { createDatabase } from "./db/client.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerBindRoutes } from "./routes/bind.js";
 import { registerScheduleRoutes } from "./routes/schedules.js";
+import { registerAdminRoutes } from "./routes/admin.js";
+import { seedSkills } from "./skills/registry.js";
 import { OneBotClient } from "./onebot/client.js";
 import { registerOneBotWs } from "./onebot/ws.js";
 import { createBotHandlers } from "./bot/handle.js";
@@ -42,6 +44,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   await app.register(websocket);
 
   const { db, sqlite } = createDatabase(config.databasePath);
+  seedSkills(db);
   app.addHook("onClose", async () => {
     sqlite.close();
   });
@@ -86,6 +89,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   registerAuthRoutes(app, { db, config });
   registerBindRoutes(app, { db, config });
   registerScheduleRoutes(app, { db });
+  registerAdminRoutes(app, { db, config });
   hub.registerRoute(app);
   registerOneBotWs(app, {
     config,
