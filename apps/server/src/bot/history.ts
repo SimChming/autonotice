@@ -12,6 +12,8 @@ export interface HistoryEntry {
   role: string;
   text: string;
   senderLabel: string;
+  /** 用户消息是否已经有对应的助手回复，用于避免模型重复回答旧消息。 */
+  replied: boolean;
 }
 
 export function appendHistory(
@@ -36,11 +38,18 @@ export function loadRecentHistory(db: Db, sessionKey: string): HistoryEntry[] {
     .all()
     .reverse();
 
-  return rows.map((row) => ({
-    role: row.role,
-    text: row.text,
-    senderLabel: row.role === "assistant" ? "鲸鱼娘" : `QQ${row.senderQq ?? "?"}`,
-  }));
+  return rows.map((row, index) => {
+    let replied = row.role !== "user";
+    if (row.role === "user") {
+      replied = rows.slice(index + 1).some((later) => later.role === "assistant");
+    }
+    return {
+      role: row.role,
+      text: row.text,
+      senderLabel: row.role === "assistant" ? "鲸鱼娘" : `QQ${row.senderQq ?? "?"}`,
+      replied,
+    };
+  });
 }
 
 export function loadSummary(db: Db, sessionKey: string): string | null {

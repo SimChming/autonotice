@@ -39,6 +39,29 @@ function extractToken(query: unknown, authorization: string | undefined): string
 export function registerOneBotWs(app: FastifyInstance, options: OneBotWsOptions): void {
   const { config, client, ingest, botQq, logger } = options;
 
+  // 同一 message_id 只处理一次：NapCat 重连或事件重投时避免重复回复/重复入库。
+  const seenMessages = new Map<string, number>();
+  const seenTtl = 10 * 60 * 1000;
+  const isDuplicate = (key: string): boolean => {
+    if (!key) {
+      return false;
+    }
+    const now = Date.now();
+    const last = seenMessages.get(key);
+    if (last !== undefined && now - last < seenTtl) {
+      return true;
+    }
+    seenMessages.set(key, now);
+    if (seenMessages.size > 1000) {
+      for (const [item, at] of seenMessages) {
+        if (now - at > seenTtl) {
+          seenMessages.delete(item);
+        }
+      }
+    }
+    return false;
+  };
+
   app.get(config.onebot.wsPath, { websocket: true }, (connection: SocketStream, request) => {
     const socket = connection.socket;
     const token = extractToken(request.query, request.headers.authorization);
@@ -61,6 +84,15 @@ export function registerOneBotWs(app: FastifyInstance, options: OneBotWsOptions)
       }
       if (client.handleResponse(payload)) {
         return;
+      }
+
+      const event = payload as { post_type?: string; message_type?: string; message_id?: unknown };
+      if (event.post_type === "message") {
+        const messageId = String(event.message_id ?? "");
+        if (messageId && isDuplicate(`${event.message_type ?? "unknown"}:${messageId}`)) {
+          logger.debug({ messageId }, "OneBot 重复消息已忽略");
+          return;
+        }
       }
 
       const message = normalizeMessageEvent(payload, botQq);

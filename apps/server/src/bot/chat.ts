@@ -16,6 +16,7 @@ import { buildInstructionPrompt, buildSkillsPrompt, getActivePersona, getEnabled
 import { executeSkill, SkillDeniedError } from "../skills/handlers.js";
 
 const MAX_ROUNDS = 10;
+const MAX_SENDS_PER_TURN = 4;
 const RATE_WINDOW_MS = 5 * 60 * 1000;
 const RATE_LIMIT = 3;
 
@@ -78,6 +79,11 @@ function isOwner(qq: string): boolean {
   return qq === OWNER_QQ;
 }
 
+/** 去重用的归一化：忽略空白与常见标点，避免「同一句话换个标点」重复发送。 */
+function normalizeText(text: string): string {
+  return text.replace(/\s+/g, "").replace(/[，。！？、,.!?~～…:：;；"'“”‘’]/g, "");
+}
+
 function assertNoTarget(params: Record<string, unknown>, owner: boolean): string | null {
   if (owner) {
     return null;
@@ -98,6 +104,8 @@ function toIso(value: unknown): number | null {
 
 export class BotChat {
   private readonly rateBuckets = new Map<string, number[]>();
+  /** 同一会话串行处理，避免并发回复同一条消息或历史快照互相覆盖。 */
+  private readonly queues = new Map<string, Promise<void>>();
 
   constructor(private readonly deps: ChatDeps) {}
 
@@ -117,6 +125,19 @@ export class BotChat {
   }
 
   async handle(input: ChatInput): Promise<void> {
+    const previous = this.queues.get(input.sessionKey) ?? Promise.resolve();
+    const task = previous.catch(() => undefined).then(() => this.handleOnce(input));
+    this.queues.set(input.sessionKey, task);
+    try {
+      await task;
+    } finally {
+      if (this.queues.get(input.sessionKey) === task) {
+        this.queues.delete(input.sessionKey);
+      }
+    }
+  }
+
+  private async handleOnce(input: ChatInput): Promise<void> {
     const { db, config, llm, logger, hub } = this.deps;
 
     if (!this.allowed(input.senderQq)) {
@@ -129,7 +150,8 @@ export class BotChat {
       ? "主人（服务器管理员，唯一指定 QQ 3874095145）"
       : `同学（QQ${input.senderQq}，昵称 ${input.senderName || "未知"}）`;
 
-    appendHistory(db, input.sessionKey, "user", input.senderQq, input.text);
+    // 先读取历史（此时不含本条消息），避免同一条消息在 prompt 里出现两次。
+    const history = loadRecentHistory(db, input.sessionKey);
 
     let memories: string[] = [];
     try {
@@ -144,7 +166,7 @@ export class BotChat {
       identity,
       capabilities: "图片/表情/语音/视频/文件/撤回/@全体 全部开启",
       memoryFragments: memories,
-      history: loadRecentHistory(db, input.sessionKey),
+      history,
       summary: loadSummary(db, input.sessionKey),
       nowIso: new Date().toISOString(),
       personaPrompt: persona.id === "persona.whale" ? undefined : persona.prompt,
@@ -157,13 +179,24 @@ export class BotChat {
       { role: "user", content: input.text || "（空消息）" },
     ];
 
+    // prompt 构建完成后再落库，保证本轮消息不会重复出现在历史里。
+    appendHistory(db, input.sessionKey, "user", input.senderQq, input.text);
+
     const sent = new Set<string>();
+    for (const entry of history) {
+      if (entry.role === "assistant") {
+        sent.add(normalizeText(entry.text));
+      }
+    }
+    const outgoing: string[] = [];
     const sendOnce = async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || sent.has(trimmed)) {
+      const key = normalizeText(trimmed);
+      if (!trimmed || !key || sent.has(key) || outgoing.length >= MAX_SENDS_PER_TURN) {
         return;
       }
-      sent.add(trimmed);
+      sent.add(key);
+      outgoing.push(trimmed);
       await input.send(trimmed);
     };
 
@@ -195,10 +228,11 @@ export class BotChat {
       if (contract.memory?.content) {
         memory = contract.memory;
       }
+      const sendsBefore = outgoing.length;
       if (contract.reply.trim()) {
         await sendOnce(contract.reply);
       }
-      for (const extra of (contract.followups ?? []).filter((item) => item.trim()).slice(0, 3)) {
+      for (const extra of (contract.followups ?? []).filter((item) => item.trim()).slice(0, 2)) {
         await new Promise((resolve) => setTimeout(resolve, 600));
         await sendOnce(extra);
       }
@@ -256,12 +290,12 @@ export class BotChat {
         continue;
       }
 
-      if (contract.continue && !nudged) {
+      if (contract.continue && !nudged && outgoing.length > sendsBefore) {
         nudged = true;
         messages.push({
           role: "user",
           content:
-            "继续完成你刚才未完成的工作，不要等用户再发消息；可以继续调用技能或 shell。全部完成后给出最终结论，并把 continue 设为 false。",
+            "继续完成你刚才未完成的工作，不要等用户再发消息；可以继续调用技能或 shell。只输出新增的实质内容，不要重复已经说过的话。全部完成后给出最终结论，并把 continue 设为 false。",
         });
         continue;
       }
@@ -269,11 +303,10 @@ export class BotChat {
       break;
     }
 
-    appendHistory(db, input.sessionKey, "assistant", null, [...sent].join("\n") || "🐋 鲸鱼娘记住啦～");
-
-    if (!sent.size) {
-      await input.send("🐋 鲸鱼娘记住啦～");
+    if (!outgoing.length) {
+      await sendOnce("🐋 鲸鱼娘记住啦～");
     }
+    appendHistory(db, input.sessionKey, "assistant", null, outgoing.join("\n") || "🐋 鲸鱼娘记住啦～");
 
     if (memory?.content) {
       try {

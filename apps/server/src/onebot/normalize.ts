@@ -5,6 +5,8 @@
 
 export interface NormalizedMessage {
   groupId: string;
+  /** OneBot 消息 id，用于去重（同一事件被重复投递时只处理一次）。 */
+  messageId: string;
   senderQq: string;
   senderName: string;
   text: string;
@@ -51,6 +53,7 @@ export function normalizePrivateMessage(event: unknown, botQq: string): Normaliz
   return {
     senderQq,
     senderName: String(sender.nickname ?? ""),
+    messageId: String(payload.message_id ?? ""),
     text: parsed.text,
     msgTime: Number.isFinite(seconds) ? seconds * 1000 : Date.now(),
     raw: event,
@@ -61,6 +64,7 @@ export function normalizePrivateMessage(event: unknown, botQq: string): Normaliz
 export interface NormalizedPrivateMessage {
   senderQq: string;
   senderName: string;
+  messageId: string;
   text: string;
   msgTime: number;
   raw: unknown;
@@ -96,6 +100,7 @@ function parseCqString(message: string): { text: string; atTargets: string[] } {
 export interface NormalizedPrivateMessage {
   senderQq: string;
   senderName: string;
+  messageId: string;
   text: string;
   msgTime: number;
   raw: unknown;
@@ -131,6 +136,7 @@ export function normalizeMessageEvent(event: unknown, botQq: string): Normalized
     groupId: String(payload.group_id ?? ""),
     senderQq,
     senderName: String(sender.card || sender.nickname || ""),
+    messageId: String(payload.message_id ?? ""),
     text: parsed.text,
     atTargets: parsed.atTargets,
     isAtBot: parsed.atTargets.includes(botQq),
