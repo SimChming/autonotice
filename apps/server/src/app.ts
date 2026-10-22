@@ -146,12 +146,13 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   // NapCat WebUI 反向代理：云安全组只放行 8080，这里把 /webui 与 NapCat 的 /api、/auth
   // 透明转发到 napcat:6099，管理员即可在后台直接打开 NapCat 面板处理 QQ 风控/重登。
   // /api/v1/* 的静态路由优先级高于该通配代理，不会受影响。
+  // 注意：不要开启 http-proxy 的 websocket 选项——它会接管全局 upgrade 事件，
+  // 与 @fastify/websocket 的 /api/v1/ws 冲突并导致 ERR_HTTP_SOCKET_ASSIGNED。
   for (const prefix of ["/webui", "/api", "/auth"]) {
     await app.register(httpProxy, {
       upstream: config.napcat.upstream,
       prefix,
       rewritePrefix: prefix,
-      websocket: true,
     });
   }
 
