@@ -36,7 +36,14 @@ export function registerGroupRoutes(app: FastifyInstance, { db, onebot }: GroupR
     if (!claims) {
       return;
     }
-    const items = listUserGroups(db, claims.sub).map((row) => toItem(row));
+    const rows = listUserGroups(db, claims.sub);
+    const items = rows.map((row) => toItem(row));
+    // 群名缺失时后台补全，下一次刷新即可看到真实群名。
+    for (const row of rows) {
+      if (!row.name) {
+        void refreshGroupInfo(onebot, db, row.groupId, app.log).catch(() => undefined);
+      }
+    }
     return groupListResponseSchema.parse({ items });
   });
 

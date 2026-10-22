@@ -2,16 +2,21 @@ import type { FastifyInstance } from "fastify";
 import { bindConfirmRequestSchema, bindConfirmResponseSchema, bindStartRequestSchema, bindStartResponseSchema, bindStatusResponseSchema } from "@autonotice/shared";
 import type { Db } from "../db/client.js";
 import type { Config } from "../config.js";
+import type { OneBotClient } from "../onebot/client.js";
 import { fail, requireUser } from "../auth/guard.js";
 import { confirmBind, getUserBinding, startBind } from "../services/bind.js";
-import { linkUserGroup } from "../services/groups.js";
+import { linkUserGroup, refreshGroupInfo } from "../services/groups.js";
 
 interface BindRouteOptions {
   db: Db;
   config: Config;
+  onebot: OneBotClient;
 }
 
-export function registerBindRoutes(app: FastifyInstance, { db, config }: BindRouteOptions): void {
+export function registerBindRoutes(
+  app: FastifyInstance,
+  { db, config, onebot }: BindRouteOptions,
+): void {
   app.post("/api/v1/bind/start", async (request, reply) => {
     const claims = await requireUser(request, reply);
     if (!claims) {
@@ -71,6 +76,7 @@ export function registerBindRoutes(app: FastifyInstance, { db, config }: BindRou
 
     // 绑定 QQ 的同时把主群加入该用户的群聊列表（多群聊管理的第一条）。
     linkUserGroup(db, claims.sub, config.bind.groupId);
+    void refreshGroupInfo(onebot, db, config.bind.groupId, app.log).catch(() => undefined);
 
     return bindConfirmResponseSchema.parse({
       qq: bound.qq,

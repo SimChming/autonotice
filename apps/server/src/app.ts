@@ -122,7 +122,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   });
 
   registerAuthRoutes(app, { db, config });
-  registerBindRoutes(app, { db, config });
+  registerBindRoutes(app, { db, config, onebot });
   registerGroupRoutes(app, { db, onebot });
   registerScheduleRoutes(app, { db });
   registerAdminRoutes(app, { db, config, onebot });
