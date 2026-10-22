@@ -12,7 +12,7 @@ import {
   type SkillManifest,
   type UpdateSkillRequest,
 } from "@autonotice/shared";
-import { ApiError } from "../services/api";
+import { ApiError, API_BASE, buildSocketUrl } from "../services/api";
 
 /** 管理员会话与普通用户会话完全隔离，使用独立存储键。 */
 export const ADMIN_TOKEN_KEY = "autonotice_admin_token";
@@ -129,7 +129,7 @@ async function rawRequest(path: string, options: RawOptions = {}): Promise<unkno
 
   let response: Response;
   try {
-    response = await fetch(`/api/v1${path}`, {
+    response = await fetch(`${API_BASE}${path}`, {
       method: options.method ?? "GET",
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -282,8 +282,7 @@ export const adminApi = {
   },
 };
 
-/** 管理员聊天 WebSocket 地址，始终同源。 */
+/** 管理员聊天 WebSocket 地址；Web 同源，原生壳按 API_BASE 推导。 */
 export function buildAdminChatSocketUrl(token: string): string {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/api/v1/admin/chat/ws?token=${encodeURIComponent(token)}`;
+  return buildSocketUrl("/admin/chat/ws", token);
 }

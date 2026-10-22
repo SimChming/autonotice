@@ -22,6 +22,22 @@ import {
 export const TOKEN_KEY = "autonotice_token";
 export const UNAUTHORIZED_EVENT = "autonotice:unauthorized";
 
+/**
+ * API 前缀：Web 走同源相对路径；原生壳（exe/apk）在构建时用 VITE_API_BASE
+ * 指定服务器绝对地址（例如 http://120.26.224.86:8080）。
+ */
+const RAW_API_BASE = String(import.meta.env.VITE_API_BASE ?? "").trim();
+
+export const API_BASE = (() => {
+  if (!RAW_API_BASE) {
+    return "/api/v1";
+  }
+  const trimmed = RAW_API_BASE.replace(/\/+$/, "");
+  return trimmed.endsWith("/api/v1") ? trimmed : `${trimmed}/api/v1`;
+})();
+
+const API_IS_ABSOLUTE = /^https?:\/\//i.test(API_BASE);
+
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -102,11 +118,11 @@ async function rawRequest(path: string, options: RawRequestOptions = {}): Promis
 
   let response: Response;
   try {
-    response = await fetch(`/api/v1${path}`, {
+    response = await fetch(`${API_BASE}${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-      credentials: "same-origin",
+      credentials: API_IS_ABSOLUTE ? "omit" : "same-origin",
     });
   } catch {
     throw new ApiError("network_error", "无法连接服务器，请检查网络后重试", 0);
@@ -179,8 +195,36 @@ export const api = {
   },
 };
 
-/** WS 只读推送地址，始终同源，不写死主机。 */
+/** WS 只读推送地址；Web 同源，原生壳按 API_BASE 推导。 */
 export function buildAlertSocketUrl(token: string): string {
+  return buildSocketUrl("/ws", token);
+}
+
+/** 通用 WS 地址构造，供管理后台聊天复用。 */
+export function buildSocketUrl(path: string, token: string): string {
+  return `${buildSocketOrigin()}${buildSocketPath(API_BASE)}${path}?token=${encodeURIComponent(token)}`;
+}
+
+function buildSocketOrigin(): string {
+  if (API_IS_ABSOLUTE) {
+    const url = new URL(API_BASE);
+    return `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}`;
+  }
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/api/v1/ws?token=${encodeURIComponent(token)}`;
+  return `${protocol}//${window.location.host}`;
+}
+
+function buildSocketPath(base: string): string {
+  return API_IS_ABSOLUTE ? new URL(base).pathname.replace(/\/+$/, "") : base;
+}
+
+/** 原生壳（file:// 或 Capacitor http://localhost）需要 hash 路由，避免刷新 404。 */
+export function isNativeShell(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return (
+    window.location.protocol === "file:" ||
+    (window.location.hostname === "localhost" && window.location.port === "")
+  );
 }

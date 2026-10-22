@@ -3,7 +3,15 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "**/coverage/**", "**/*.config.js"],
+    ignores: [
+      "**/dist/**",
+      "**/node_modules/**",
+      "**/coverage/**",
+      "**/*.config.js",
+      "apps/mobile/android/**",
+      "apps/desktop/src-tauri/target/**",
+      "apps/desktop/src-tauri/gen/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

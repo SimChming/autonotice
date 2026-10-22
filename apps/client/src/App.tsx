@@ -1,12 +1,12 @@
 import { useEffect, type ReactNode } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { AlertsPage } from "./pages/Alerts";
 import { BindPage } from "./pages/Bind";
 import { LoginPage } from "./pages/Login";
 import { SchedulePage } from "./pages/Schedule";
 import { SettingsPage } from "./pages/Settings";
-import { UNAUTHORIZED_EVENT } from "./services/api";
+import { UNAUTHORIZED_EVENT, isNativeShell } from "./services/api";
 import { useAuthStore } from "./stores/auth";
 import { AdminRoot } from "./admin/AdminRoot";
 import { AdminChatPage } from "./admin/pages/AdminChat";
@@ -32,6 +32,8 @@ function RootRedirect() {
 
 export function App() {
   const logout = useAuthStore((state) => state.logout);
+  // 原生壳（Tauri file:// / Capacitor http://localhost）用 hash 路由，避免刷新丢页。
+  const Router = isNativeShell() ? HashRouter : BrowserRouter;
 
   useEffect(() => {
     // API 401 与 WS 鉴权失败共用同一个事件，避免各页面重复处理。
@@ -41,7 +43,7 @@ export function App() {
   }, [logout]);
 
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
         <Route
           path="/login"
@@ -75,6 +77,6 @@ export function App() {
         </Route>
         <Route path="*" element={<RootRedirect />} />
       </Routes>
-    </BrowserRouter>
+    </Router>
   );
 }
