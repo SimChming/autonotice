@@ -7,7 +7,8 @@ import type { NotifyHub } from "../notify/hub.js";
 import { triggers } from "../db/schema.js";
 import type { OneBotClient } from "../onebot/client.js";
 import { fetchBinary } from "../pipeline/fetcher.js";
-import { getActivePersona, setActivePersona } from "./registry.js";
+import { getActivePersona, listSkills, setActivePersona } from "./registry.js";
+import { skills as skillsTable } from "../db/schema.js";
 
 export interface SkillContext {
   db: Db;
@@ -29,6 +30,7 @@ export const SUPPORTED_HANDLERS = [
   { id: "trigger.create", description: "创建定时/事件触发器（params.kind/at/event/say/action）" },
   { id: "trigger.list", description: "列出自己的触发器" },
   { id: "trigger.cancel", description: "取消触发器（params.id）" },
+  { id: "skill.manage", description: "技能自迭代：list/update/create/delete（仅主人）" },
 ] as const;
 
 export class SkillDeniedError extends Error {}
@@ -198,6 +200,103 @@ export async function executeSkill(
       }
       context.db.update(triggers).set({ enabled: 0 }).where(eq(triggers.id, id)).run();
       return `已取消触发器 id=${id}`;
+    }
+
+    case "skill.manage": {
+      if (context.qq !== OWNER_QQ) {
+        throw new SkillDeniedError("技能自迭代仅主人可用");
+      }
+      const action = String(params.action ?? "list");
+
+      if (action === "list") {
+        return JSON.stringify(listSkills(context.db));
+      }
+
+      if (action === "update") {
+        const id = String(params.id ?? "");
+        const existing = context.db.select().from(skillsTable).where(eq(skillsTable.id, id)).get();
+        if (!existing) {
+          return `技能 ${id} 不存在`;
+        }
+        const patch = (params.patch ?? {}) as Record<string, unknown>;
+        if (existing.builtin === 1 && (patch.type !== undefined || patch.handler !== undefined)) {
+          return "内置技能不允许修改 type/handler";
+        }
+        if (
+          context.db
+            .update(skillsTable)
+            .set({
+              name: typeof patch.name === "string" ? patch.name : existing.name,
+              description:
+                typeof patch.description === "string" ? patch.description : existing.description,
+              enabled:
+                typeof patch.enabled === "boolean" ? (patch.enabled ? 1 : 0) : existing.enabled,
+              prompt: typeof patch.prompt === "string" ? patch.prompt : existing.prompt,
+              handler: typeof patch.handler === "string" ? patch.handler : existing.handler,
+              permissions:
+                typeof patch.permissions === "string" ? patch.permissions : existing.permissions,
+              paramsSchema:
+                patch.paramsSchema === undefined
+                  ? existing.paramsSchema
+                  : JSON.stringify(patch.paramsSchema),
+              updatedAt: Date.now(),
+            })
+            .where(eq(skillsTable.id, id))
+            .run()
+        ) {
+          return `技能 ${id} 已更新`;
+        }
+        return `技能 ${id} 更新失败`;
+      }
+
+      if (action === "create") {
+        const skill = (params.skill ?? {}) as Record<string, unknown>;
+        const id = String(skill.id ?? "").trim();
+        if (!/^[a-z0-9_.-]{2,48}$/.test(id)) {
+          return "技能 id 非法";
+        }
+        if (context.db.select().from(skillsTable).where(eq(skillsTable.id, id)).get()) {
+          return `技能 ${id} 已存在`;
+        }
+        const handlerName = typeof skill.handler === "string" ? skill.handler : null;
+        if (handlerName && !SUPPORTED_HANDLERS.some((item) => item.id === handlerName)) {
+          return `handler ${handlerName} 不在白名单`;
+        }
+        context.db
+          .insert(skillsTable)
+          .values({
+            id,
+            name: String(skill.name ?? id),
+            description: String(skill.description ?? ""),
+            type: String(skill.type ?? "instruction"),
+            enabled: skill.enabled === false ? 0 : 1,
+            prompt: String(skill.prompt ?? ""),
+            handler: handlerName,
+            permissions: String(skill.permissions ?? "all"),
+            paramsSchema: JSON.stringify(skill.paramsSchema ?? {}),
+            version: String(skill.version ?? "1.0.0"),
+            builtin: 0,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          })
+          .run();
+        return `技能 ${id} 已创建`;
+      }
+
+      if (action === "delete") {
+        const id = String(params.id ?? "");
+        const existing = context.db.select().from(skillsTable).where(eq(skillsTable.id, id)).get();
+        if (!existing) {
+          return `技能 ${id} 不存在`;
+        }
+        if (existing.builtin === 1) {
+          return "内置技能不能删除，只能停用";
+        }
+        context.db.delete(skillsTable).where(eq(skillsTable.id, id)).run();
+        return `技能 ${id} 已删除`;
+      }
+
+      return `未知 skill.manage 动作 ${action}`;
     }
 
     default:

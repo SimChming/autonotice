@@ -258,6 +258,8 @@ autonotice/                          # 仓库根（v2 分支）
 
 **扩展方式**：新增能力 = 在 `apps/server/src/skills/handlers.ts` 注册 handler + 加入 `SUPPORTED_HANDLERS` + 种子一条内置技能；后台即可图形化启停与修改描述，无需改 `bot/chat.ts`。
 
+**技能自迭代（主人专属）**：`tool.skill.manage` 提供 `list / update / create / delete`，允许机器人结合 `/repo/AI-WORKFLOW.md`（镜像内已复制）修改声明式技能（描述、提示词、启停、参数 schema），改完在 QQ 里反馈改动与验证方式。受硬约束：内置技能不可改 type/handler、不可删除；handler 代码级改动必须重新构建部署，机器人不能自行发版，必须如实告知主人。
+
 **管理 API**：见 §6 `/api/v1/admin/skills*`（管理后台图形页面在 Phase 7 实现）。
 
 ***
@@ -281,6 +283,12 @@ autonotice/                          # 仓库根（v2 分支）
 - 时间触发器由 node-cron **每 15 秒**扫描，到点执行后自动停用（一次性）。
 - 事件触发器在群消息入库后按关键词匹配当前会话，命中即执行并停用。
 - 动作类型：`say`（发消息）、`skill`（执行技能）、`shell`（仅主人触发器允许）、`notify`（客户端推送）。权限跟随触发器创建者，服务端硬校验，不信任模型。
+
+**管理后台聊天通道（QQ 掉线兜底）**
+
+- 后台 `/admin/chat` 与主人 QQ 私聊共用同一会话（`sessionKey = private:3874095145`），历史读写 `bot_history`。
+- 接口：`GET /api/v1/admin/chat/history?limit=100`、`POST /api/v1/admin/chat/send {text}`（202，异步处理）、`WS /api/v1/admin/chat/ws?token=<admin JWT>`。
+- QQ 私聊消息与 AI 回复会实时镜像到 WS；后台发送的消息在 QQ 在线时同时尝试私聊发送，失败则仅保留后台通道。
 
 ***
 
@@ -330,6 +338,9 @@ GET/PUT /api/v1/admin/settings              → 模型/密钥(掩码)/能力开�
 GET/POST/DELETE /api/v1/admin/users         → QQ 用户与角色管理（owner/普通）
 GET/POST/PATCH/DELETE /api/v1/admin/skills  → 技能管理（内置不可删，handler 走白名单）
 GET  /api/v1/admin/skills/handlers          → 可用内置 handler 列表
+GET  /api/v1/admin/chat/history             → 主人私聊会话历史（与 QQ 共用）
+POST /api/v1/admin/chat/send                → 后台发消息给 AI（202，回复走 WS）
+WS   /api/v1/admin/chat/ws?token=<adminJWT> → 私聊消息/回复实时镜像
 GET  /api/v1/admin/overview                 → 连接状态/配额/审计
 ```
 
@@ -452,6 +463,8 @@ GET  /api/v1/admin/overview                 → 连接状态/配额/审计
 - [ ] 文档生成（xlsx/docx/pdf，配额默认 2/人/日，容器内装中文字体防 PDF 乱码）
 - [x] admin 前端页（复用 client 路由 `/admin`，自适应三档）
 - [x] 后台技能管理页：技能列表/启停/新增（persona/tool/instruction）/删除，handler 从白名单下拉选择
+- [x] 后台 AI 聊天页：与主人 QQ 私聊共用会话，QQ 掉线时可继续对话（WS 实时镜像）
+- [x] 技能自迭代：`tool.skill.manage`（仅主人）+ 镜像内 `/repo/AI-WORKFLOW.md` 可读，声明式技能可自改并反馈
 
 **验收**：后台改模型 → 下一条机器人消息即用新模型（无需重启）；普通用户 token 访问 `/admin/*` 返回 403；主人从 QQ 侧发起可免密进后台；文档生成下载成功且配额生效。
 

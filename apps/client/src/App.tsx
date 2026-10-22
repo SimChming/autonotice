@@ -9,6 +9,7 @@ import { SettingsPage } from "./pages/Settings";
 import { UNAUTHORIZED_EVENT } from "./services/api";
 import { useAuthStore } from "./stores/auth";
 import { AdminRoot } from "./admin/AdminRoot";
+import { AdminChatPage } from "./admin/pages/AdminChat";
 import { AdminModelsPage } from "./admin/pages/AdminModels";
 import { AdminOverviewPage } from "./admin/pages/AdminOverview";
 import { AdminSkillsPage } from "./admin/pages/AdminSkills";
@@ -70,6 +71,7 @@ export function App() {
           <Route path="skills" element={<AdminSkillsPage />} />
           <Route path="models" element={<AdminModelsPage />} />
           <Route path="users" element={<AdminUsersPage />} />
+          <Route path="chat" element={<AdminChatPage />} />
         </Route>
         <Route path="*" element={<RootRedirect />} />
       </Routes>

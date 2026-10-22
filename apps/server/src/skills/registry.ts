@@ -139,6 +139,27 @@ const BUILTIN_SKILLS: Array<Omit<CreateSkillRequest, "version"> & { version?: st
       properties: { id: { type: "number" } },
     },
   },
+  {
+    id: "tool.skill.manage",
+    name: "技能自迭代",
+    description:
+      "主人专用：读取/修改/新增/删除技能清单。params.action=list|update|create|delete；update 传 id+patch，create 传 skill 对象。结合 /repo/AI-WORKFLOW.md 判断如何调整。",
+    type: "tool",
+    enabled: true,
+    prompt: "",
+    handler: "skill.manage",
+    permissions: "owner",
+    paramsSchema: {
+      type: "object",
+      required: ["action"],
+      properties: {
+        action: { type: "string", enum: ["list", "update", "create", "delete"] },
+        id: { type: "string" },
+        patch: { type: "object" },
+        skill: { type: "object" },
+      },
+    },
+  },
 ];
 
 export function seedSkills(db: Db): void {

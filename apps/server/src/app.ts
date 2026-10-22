@@ -24,6 +24,8 @@ import { mergeAndSave } from "./pipeline/merge.js";
 import { NotifyHub } from "./notify/hub.js";
 import { startReminderScheduler } from "./scheduler/reminders.js";
 import { fireEventTriggers, startTriggerScheduler } from "./triggers/executor.js";
+import { AdminChatHub } from "./admin/chat-hub.js";
+import { registerAdminChatRoutes } from "./admin/chat-routes.js";
 
 /**
  * 装配 Fastify 实例。路由层只做：鉴权 → zod 校验 → 调服务 → 返回（§4.4）。
@@ -54,7 +56,16 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   const onebot = new OneBotClient();
   const llm = createLlmClient(() => getRuntimeLlm(db, config));
   const hub = new NotifyHub(app.log);
-  const bot = createBotHandlers({ db, config, llm, hub, onebot, logger: app.log });
+  const adminChatHub = new AdminChatHub();
+  const bot = createBotHandlers({
+    db,
+    config,
+    llm,
+    hub,
+    onebot,
+    logger: app.log,
+    mirrorPrivate: (message) => adminChatHub.push(message),
+  });
   const triggerContext = { db, config, onebot, hub, logger: app.log };
 
   const ingest: IngestDeps = {
@@ -100,6 +111,8 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   registerBindRoutes(app, { db, config });
   registerScheduleRoutes(app, { db });
   registerAdminRoutes(app, { db, config, onebot });
+  adminChatHub.registerRoute(app);
+  registerAdminChatRoutes(app, { db, onebot, hub: adminChatHub, bot });
   hub.registerRoute(app);
   registerOneBotWs(app, {
     config,

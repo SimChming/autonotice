@@ -20,6 +20,7 @@ const NAV_ITEMS: AdminNavItem[] = [
   { to: "/admin/skills", label: "技能" },
   { to: "/admin/models", label: "模型" },
   { to: "/admin/users", label: "用户" },
+  { to: "/admin/chat", label: "聊天" },
 ];
 
 function AdminBrand() {

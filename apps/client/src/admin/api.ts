@@ -44,6 +44,14 @@ export interface SkillHandlerInfo {
   description: string;
 }
 
+/** 管理员聊天与主人 QQ 私聊共用同一会话历史。 */
+export interface AdminChatHistoryItem {
+  role: "user" | "assistant";
+  text: string;
+  qq: string;
+  at: string;
+}
+
 interface Parser<T> {
   parse(input: unknown): T;
 }
@@ -173,6 +181,43 @@ function parseHandlers(data: unknown): SkillHandlerInfo[] {
   });
 }
 
+function parseChatMessage(value: unknown): AdminChatHistoryItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const role = value.role;
+  if (role !== "user" && role !== "assistant") {
+    return null;
+  }
+  if (typeof value.text !== "string" || typeof value.at !== "string") {
+    return null;
+  }
+  return {
+    role,
+    text: value.text,
+    qq: typeof value.qq === "string" ? value.qq : "",
+    at: value.at,
+  };
+}
+
+/** WS 推送的 {type:"chat",...} 载荷校验；不是聊天消息时返回 null。 */
+export function parseAdminChatMessage(value: unknown): AdminChatHistoryItem | null {
+  return parseChatMessage(value);
+}
+
+function parseChatHistory(data: unknown): AdminChatHistoryItem[] {
+  if (!isRecord(data) || !Array.isArray(data.items)) {
+    throw new ApiError("invalid_response", "服务端返回的数据格式异常", 0);
+  }
+  return data.items.map((item) => {
+    const message = parseChatMessage(item);
+    if (!message) {
+      throw new ApiError("invalid_response", "服务端返回的数据格式异常", 0);
+    }
+    return message;
+  });
+}
+
 const skillPath = (id: string) => `/admin/skills/${encodeURIComponent(id)}`;
 
 export const adminApi = {
@@ -227,4 +272,18 @@ export const adminApi = {
   async deleteUser(id: number): Promise<void> {
     await rawRequest(`/admin/users/${id}`, { method: "DELETE" });
   },
+
+  async chatHistory(limit = 100): Promise<AdminChatHistoryItem[]> {
+    return parseChatHistory(await rawRequest(`/admin/chat/history?limit=${limit}`));
+  },
+
+  async sendChat(text: string): Promise<void> {
+    await rawRequest("/admin/chat/send", { method: "POST", body: { text } });
+  },
 };
+
+/** 管理员聊天 WebSocket 地址，始终同源。 */
+export function buildAdminChatSocketUrl(token: string): string {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/api/v1/admin/chat/ws?token=${encodeURIComponent(token)}`;
+}
