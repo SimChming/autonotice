@@ -1,6 +1,6 @@
 {
   "name": "@autonotice/desktop",
-  "version": "2.3.9",
+  "version": "2.3.11",
   "private": true,
   "description": "Autonotice Windows 桌面壳（Tauri 2，加载 apps/client/dist）",
   "scripts": {

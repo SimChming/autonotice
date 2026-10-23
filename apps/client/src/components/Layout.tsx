@@ -4,6 +4,11 @@ import { SERVICE_VERSION } from "@autonotice/shared";
 import { useAuthStore } from "../stores/auth";
 import { useScheduleStore } from "../stores/schedule";
 import { buildAlertSocketUrl, UNAUTHORIZED_EVENT } from "../services/api";
+import {
+  platformKind,
+  requestNotificationPermission,
+  sendSystemNotification,
+} from "../services/notify";
 import { useLayoutMode } from "../hooks/useLayoutMode";
 import { BellIcon, BrandIcon, CalendarIcon, GroupsIcon, LinkIcon, ShieldIcon, UserIcon } from "./Icons";
 import { TabBar, type NavItem } from "./TabBar";
@@ -55,6 +60,23 @@ function isAlertPush(value: unknown): value is AlertPush {
     typeof record.id === "number" &&
     typeof record.title === "string" &&
     typeof record.body === "string"
+  );
+}
+
+interface AlarmPush {
+  type: "alarm";
+  title: string;
+  body: string;
+  mode?: string;
+}
+
+function isAlarmPush(value: unknown): value is AlarmPush {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    record.type === "alarm" && typeof record.title === "string" && typeof record.body === "string"
   );
 }
 
@@ -111,6 +133,13 @@ export function Layout() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
+  // 原生端（Android/桌面）启动时申请系统通知权限；Web 需用户手势，交给设置页按钮。
+  useEffect(() => {
+    if (platformKind() !== "web") {
+      void requestNotificationPermission();
+    }
+  }, []);
+
   useEffect(() => {
     if (!token) {
       return;
@@ -141,13 +170,29 @@ export function Layout() {
         } catch {
           return;
         }
+        if (isAlarmPush(payload)) {
+          const body = payload.body || "闹铃时间到了，快起来看看！";
+          pushToast({
+            title: `闹铃 · ${payload.title}`,
+            description: body,
+            tone: "warn",
+          });
+          void sendSystemNotification({ title: payload.title, body, alarm: true });
+          return;
+        }
         if (!isAlertPush(payload)) {
           return;
         }
+        const description = payload.body || "日程时间快到了，打开提醒列表查看详情。";
         pushToast({
           title: `提醒 · ${payload.title}`,
-          description: payload.body || "日程时间快到了，打开提醒列表查看详情。",
+          description,
           tone: "warn",
+        });
+        void sendSystemNotification({
+          title: `提醒 · ${payload.title}`,
+          body: description,
+          alarm: payload.level === "urgent",
         });
         void useScheduleStore.getState().fetchAlerts();
       });

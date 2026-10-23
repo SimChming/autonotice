@@ -1,6 +1,6 @@
 {
   "name": "@autonotice/client",
-  "version": "2.3.9",
+  "version": "2.3.11",
   "private": true,
   "type": "module",
   "scripts": {
