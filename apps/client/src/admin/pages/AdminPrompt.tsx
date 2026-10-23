@@ -5,7 +5,6 @@ import { AdminNotice, AdminPageHead, AdminTag } from "../AdminKit";
 import type { AdminOutletContext } from "../AdminLayout";
 import { adminApi, adminErrorMessage } from "../api";
 import { RefreshIcon, TrashIcon } from "../../components/Icons";
-import { formatDateTime } from "../../utils/date";
 
 /** 后台：查看/编辑初始 prompt 与记忆，保存后下一条消息立即生效。 */
 export function AdminPromptPage() {
@@ -209,9 +208,7 @@ export function AdminPromptPage() {
             {data.items.map((memory) => (
               <article className="admin-memory-item" key={memory.id}>
                 <div className="admin-memory-meta">
-                  <AdminTag>{memory.sessionKey}</AdminTag>
-                  <span>QQ {memory.senderQq ?? "—"}</span>
-                  <span>{formatDateTime(memory.createdAt)}</span>
+                  <AdminTag tone="builtin">{memory.source ?? memory.sessionKey}</AdminTag>
                   {memory.tags.map((tag) => (
                     <AdminTag key={tag} tone="accent">
                       #{tag}

@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { SERVICE_VERSION } from "@autonotice/shared";
 import { useAuthStore } from "../stores/auth";
-import { WhaleMark } from "../components/Icons";
+import { BrandIcon } from "../components/Icons";
 
 type Mode = "login" | "register";
 
@@ -76,7 +76,7 @@ export function LoginPage() {
       <section className="auth-card" aria-labelledby="auth-title">
         <div className="auth-brand">
           <span className="brand__mark brand__mark--large">
-            <WhaleMark />
+            <BrandIcon />
           </span>
           <span className="auth-brand__text">
             <strong>Autonotice {SERVICE_VERSION}</strong>

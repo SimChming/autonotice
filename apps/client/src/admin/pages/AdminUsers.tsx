@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { EmptyState } from "../../components/EmptyState";
 import { RefreshIcon, TrashIcon } from "../../components/Icons";
+import { UserAvatar } from "../../components/UserAvatar";
 import { formatDateTime } from "../../utils/date";
 import { AdminNotice, AdminPageHead, AdminTag } from "../AdminKit";
 import type { AdminOutletContext } from "../AdminLayout";
@@ -97,9 +98,7 @@ export function AdminUsersPage() {
                 <tr key={user.id}>
                   <td data-label="用户">
                     <div className="admin-user-name">
-                      <span className="avatar" aria-hidden="true">
-                        {user.username.slice(0, 1).toUpperCase()}
-                      </span>
+                      <UserAvatar qq={user.qq} name={user.username} />
                       <div>
                         <strong>{user.username}</strong>
                         <span>#{user.id}</span>

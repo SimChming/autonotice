@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { SERVICE_VERSION } from "@autonotice/shared";
-import { LogoutIcon, WhaleMark } from "../components/Icons";
+import { BrandIcon, LogoutIcon } from "../components/Icons";
 import { ToastHost, type ToastMessage } from "../components/Toast";
 
 export type AdminNotify = (title: string, description?: string, tone?: "info" | "warn") => void;
@@ -31,7 +31,7 @@ function AdminBrand() {
   return (
     <div className="admin-brand">
       <span className="brand__mark admin-brand__mark">
-        <WhaleMark />
+        <BrandIcon />
       </span>
       <span className="admin-brand__text">
         <strong>Autonotice {SERVICE_VERSION}</strong>
@@ -116,7 +116,7 @@ export function AdminLayout({ onLogout }: { onLogout: () => void }) {
         <header className="admin-topbar">
           <div className="admin-topbar__brand">
             <span className="brand__mark admin-brand__mark">
-              <WhaleMark />
+              <BrandIcon />
             </span>
             <strong>Autonotice {SERVICE_VERSION} 管理</strong>
           </div>

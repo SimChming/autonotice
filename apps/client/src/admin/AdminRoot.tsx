@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { SERVICE_VERSION } from "@autonotice/shared";
-import { WhaleMark } from "../components/Icons";
+import { BrandIcon } from "../components/Icons";
 import {
   ADMIN_TOKEN_KEY,
   ADMIN_UNAUTHORIZED_EVENT,
@@ -49,7 +49,7 @@ function AdminLoginPage({ onLoggedIn }: AdminLoginPageProps) {
       <section className="auth-card" aria-labelledby="admin-login-title">
         <div className="auth-brand">
           <span className="brand__mark brand__mark--large">
-            <WhaleMark />
+            <BrandIcon />
           </span>
           <span className="auth-brand__text">
             <strong>Autonotice {SERVICE_VERSION}</strong>

@@ -3,6 +3,7 @@ import { SERVICE_VERSION } from "@autonotice/shared";
 import { useAuthStore } from "../stores/auth";
 import { formatDateTime } from "../utils/date";
 import { ArrowRightIcon, LogoutIcon } from "../components/Icons";
+import { UserAvatar } from "../components/UserAvatar";
 import { getAdminToken } from "../admin/api";
 
 export function SettingsPage() {
@@ -15,8 +16,6 @@ export function SettingsPage() {
   // 后台入口只在显式带 ?admin=1 或本机已有管理员 token 时出现，普通用户看不到。
   const showAdminEntry =
     new URLSearchParams(location.search).get("admin") === "1" || Boolean(getAdminToken());
-
-  const initial = user?.username.slice(0, 1).toUpperCase() ?? "?";
 
   const handleLogout = () => {
     if (!window.confirm("确认退出登录？")) {
@@ -39,7 +38,7 @@ export function SettingsPage() {
       <section className="panel" aria-labelledby="settings-account">
         <h2 id="settings-account">账号</h2>
         <div className="account-row">
-          <span className="avatar avatar--large">{initial}</span>
+          <UserAvatar qq={bound?.qq} name={user?.username} large />
           <div>
             <strong>{user?.username ?? "未知用户"}</strong>
             <span>{user ? `用户 ID #${user.id}` : "正在读取账号信息"}</span>

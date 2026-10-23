@@ -28,6 +28,11 @@ function SvgIcon({ children, className, viewBox = "0 0 24 24", filled = false }:
   );
 }
 
+/** 左上角品牌图标：统一使用站点 icon.ico。 */
+export function BrandIcon({ className }: IconProps) {
+  return <img className={className} src="/favicon.ico" alt="" draggable={false} />;
+}
+
 /** 简洁的鲸鱼侧影：品牌标识，也是深色主题的视觉锚点。 */
 export function WhaleMark({ className }: IconProps) {
   return (

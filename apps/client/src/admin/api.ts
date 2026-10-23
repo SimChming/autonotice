@@ -45,6 +45,7 @@ export interface AdminUser {
   role: "owner" | "user";
   verifiedAt: string | null;
   createdAt: string;
+  avatarUrl?: string | null;
 }
 
 /** handlers 接口没有共享 schema，按约定形状做轻量校验。 */

@@ -29,6 +29,8 @@ export const adminUserSchema = z.object({
   role: z.enum(["owner", "user"]),
   verifiedAt: z.string().nullable(),
   createdAt: z.string(),
+  /** 已绑定 QQ 的头像地址（来自 QQ 头像 CDN）。 */
+  avatarUrl: z.string().nullable().optional(),
 });
 
 export const adminUserListResponseSchema = z.object({
@@ -58,6 +60,8 @@ export const adminMemorySchema = z.object({
   kind: z.string(),
   scope: z.string(),
   createdAt: z.string(),
+  /** 记忆来源：群聊/私聊、对象与时间。 */
+  source: z.string().optional(),
 });
 
 export type AdminMemory = z.infer<typeof adminMemorySchema>;

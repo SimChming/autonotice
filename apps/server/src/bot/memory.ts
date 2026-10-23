@@ -1,10 +1,13 @@
 import { desc, eq, or } from "drizzle-orm";
+import { OWNER_QQ } from "@autonotice/shared";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
-import { memories } from "../db/schema.js";
+import { groups, memories } from "../db/schema.js";
 
 const CANDIDATE_LIMIT = 200;
 const TOP_K = 5;
+const RECENT_ALWAYS = 3;
+const MAX_ITEMS = 8;
 const MIN_SCORE = 0.35;
 
 interface EmbeddingResponse {
@@ -77,6 +80,46 @@ export async function saveMemory(
     .run();
 }
 
+/** 记忆来源：群聊/私聊、对象与时间，注入 prompt 和后台展示共用。 */
+export function memorySourceLabel(
+  db: Db,
+  row: { sessionKey: string; senderQq: string | null; createdAt: number },
+): string {
+  const time = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(row.createdAt));
+  const sender =
+    row.senderQq === null
+      ? ""
+      : row.senderQq === OWNER_QQ
+        ? ` · 主人(QQ${row.senderQq})`
+        : ` · 发言人 QQ${row.senderQq}`;
+
+  const groupMatch = /^group:(\d+)$/.exec(row.sessionKey);
+  if (groupMatch) {
+    const groupId = groupMatch[1] ?? "";
+    const group = db
+      .select({ name: groups.name })
+      .from(groups)
+      .where(eq(groups.groupId, groupId))
+      .get();
+    const name = group?.name?.trim() ? `「${group.name}」` : "";
+    return `群聊${name}(${groupId})${sender} · ${time}`;
+  }
+
+  const privateMatch = /^private:(\d+)$/.exec(row.sessionKey);
+  if (privateMatch) {
+    return `私聊 QQ${privateMatch[1]}${sender} · ${time}`;
+  }
+
+  return `${row.sessionKey}${sender} · ${time}`;
+}
+
 /** 同会话或同发送者的候选里暴力余弦 top5，低于阈值不注入（§4.5）。 */
 export async function recallMemories(
   db: Db,
@@ -85,10 +128,16 @@ export async function recallMemories(
   senderQq: string,
   query: string,
 ): Promise<string[]> {
+  const owner = senderQq === OWNER_QQ;
+  // 隐私硬规则：非主人只能召回自己写的记忆，绝不注入群友或主人的记忆。
+  const scope = owner
+    ? or(eq(memories.sessionKey, sessionKey), eq(memories.senderQq, senderQq))
+    : eq(memories.senderQq, senderQq);
+
   const rows = db
     .select()
     .from(memories)
-    .where(or(eq(memories.sessionKey, sessionKey), eq(memories.senderQq, senderQq)))
+    .where(scope)
     .orderBy(desc(memories.id))
     .limit(CANDIDATE_LIMIT)
     .all();
@@ -96,24 +145,38 @@ export async function recallMemories(
     return [];
   }
 
-  const queryVector = await embed(config, query);
-  if (!queryVector) {
-    return [];
+  const selected = new Map<number, (typeof rows)[number]>();
+  // 最近几条始终带上，保证模型每次回答前都能看到记忆库，而不是只依赖向量命中。
+  for (const row of rows.slice(0, RECENT_ALWAYS)) {
+    selected.set(row.id, row);
   }
 
-  const scored = rows
-    .map((row) => {
-      let vector: number[] = [];
-      try {
-        vector = JSON.parse(row.embedding) as number[];
-      } catch {
-        vector = [];
-      }
-      return { content: row.content, score: cosine(queryVector, vector) };
-    })
-    .filter((item) => item.score >= MIN_SCORE)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, TOP_K);
+  const queryVector = await embed(config, query);
+  if (queryVector) {
+    const scored = rows
+      .map((row) => {
+        let vector: number[] = [];
+        try {
+          vector = JSON.parse(row.embedding) as number[];
+        } catch {
+          vector = [];
+        }
+        return { row, score: cosine(queryVector, vector) };
+      })
+      .filter((item) => item.score >= MIN_SCORE)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, TOP_K);
+    for (const item of scored) {
+      selected.set(item.row.id, item.row);
+    }
+  } else {
+    // embedding 不可用时退化为最近记忆，避免完全读不到记忆库。
+    for (const row of rows.slice(0, TOP_K)) {
+      selected.set(row.id, row);
+    }
+  }
 
-  return scored.map((item) => item.content);
+  return [...selected.values()]
+    .slice(0, MAX_ITEMS)
+    .map((row) => `[${memorySourceLabel(db, row)}] ${row.content}`);
 }

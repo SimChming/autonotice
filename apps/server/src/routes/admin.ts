@@ -15,7 +15,7 @@ import {
   skillManifestSchema,
   updateSkillRequestSchema,
 } from "@autonotice/shared";
-import { OWNER_QQ, SERVICE_VERSION } from "@autonotice/shared";
+import { OWNER_QQ, SERVICE_VERSION, qqAvatarUrl } from "@autonotice/shared";
 import type { Config } from "../config.js";
 import type { Db } from "../db/client.js";
 import { bindings, memories, messages, scheduleItems, skills, users } from "../db/schema.js";
@@ -24,7 +24,7 @@ import { fail, requireAdmin } from "../auth/guard.js";
 import { getRuntimeLlm, maskKey } from "../llm/runtime.js";
 import { getActivePersona, getSetting, listSkills, setSetting, toManifest } from "../skills/registry.js";
 import { SUPPORTED_HANDLERS } from "../skills/handlers.js";
-import { embedText } from "../bot/memory.js";
+import { embedText, memorySourceLabel } from "../bot/memory.js";
 import { verifyAdmin } from "../services/admin.js";
 
 interface AdminRouteOptions {
@@ -35,7 +35,7 @@ interface AdminRouteOptions {
 
 const PROMPT_OVERRIDE_KEY = "prompt.persona_override";
 
-function toMemoryItem(row: typeof memories.$inferSelect) {
+function toMemoryItem(db: Db, row: typeof memories.$inferSelect) {
   let tags: string[] = [];
   try {
     tags = JSON.parse(row.tags) as string[];
@@ -51,6 +51,7 @@ function toMemoryItem(row: typeof memories.$inferSelect) {
     kind: row.kind,
     scope: row.scope,
     createdAt: new Date(row.createdAt).toISOString(),
+    source: memorySourceLabel(db, row),
   };
 }
 
@@ -66,7 +67,7 @@ function buildPromptPayload(db: Db) {
     overridePrompt: override,
     effectivePrompt: override.trim() || active.prompt,
     memoryCount: db.select({ value: count() }).from(memories).get()?.value ?? 0,
-    items: rows.map(toMemoryItem),
+    items: rows.map((row) => toMemoryItem(db, row)),
   });
 }
 
@@ -199,7 +200,7 @@ export function registerAdminRoutes(app: FastifyInstance, { db, config, onebot }
     }
 
     const content = parsed.data.content ?? existing.content;
-    const tags = parsed.data.tags ?? toMemoryItem(existing).tags;
+    const tags = parsed.data.tags ?? toMemoryItem(db, existing).tags;
     let embedding = existing.embedding;
     if (content !== existing.content) {
       const runtime = getRuntimeLlm(db, config);
@@ -226,7 +227,7 @@ export function registerAdminRoutes(app: FastifyInstance, { db, config, onebot }
       .where(eq(memories.id, id))
       .returning()
       .get();
-    return toMemoryItem(row);
+    return toMemoryItem(db, row);
   });
 
   app.delete("/api/v1/admin/memories/:id", async (request, reply) => {
@@ -268,6 +269,7 @@ export function registerAdminRoutes(app: FastifyInstance, { db, config, onebot }
         role: row.qq === OWNER_QQ ? "owner" : "user",
         verifiedAt: row.verifiedAt === null ? null : new Date(row.verifiedAt).toISOString(),
         createdAt: new Date(row.createdAt).toISOString(),
+        avatarUrl: row.qq ? qqAvatarUrl(row.qq) : null,
       })),
     });
   });

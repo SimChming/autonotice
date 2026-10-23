@@ -1,5 +1,5 @@
 /* ============================================================
-   Autonotice 2.3.7 · 深色主题
+   Autonotice 2.3.9 · 深色主题
    纯原生 CSS：变量 → 布局 → 组件 → 响应式 → 动效
    ============================================================ */
 
@@ -188,6 +188,14 @@ dd {
   color: var(--accent);
   background: linear-gradient(145deg, rgba(79, 209, 197, 0.2), rgba(91, 157, 255, 0.1));
   box-shadow: 0 8px 24px rgba(79, 209, 197, 0.12);
+}
+
+.brand__mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .brand__mark svg {
@@ -453,6 +461,20 @@ dd {
   height: 52px;
   border-radius: 16px;
   font-size: 20px;
+}
+
+.avatar--img {
+  padding: 0;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.avatar-link {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  line-height: 0;
 }
 
 /* ---------- 页头 ---------- */

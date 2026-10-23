@@ -5,9 +5,10 @@ import { useAuthStore } from "../stores/auth";
 import { useScheduleStore } from "../stores/schedule";
 import { buildAlertSocketUrl, UNAUTHORIZED_EVENT } from "../services/api";
 import { useLayoutMode } from "../hooks/useLayoutMode";
-import { BellIcon, CalendarIcon, GroupsIcon, LinkIcon, ShieldIcon, UserIcon, WhaleMark } from "./Icons";
+import { BellIcon, BrandIcon, CalendarIcon, GroupsIcon, LinkIcon, ShieldIcon, UserIcon } from "./Icons";
 import { TabBar, type NavItem } from "./TabBar";
 import { ToastHost, type ToastMessage } from "./Toast";
+import { UserAvatar } from "./UserAvatar";
 import { ADMIN_TOKEN_KEY, ADMIN_UNAUTHORIZED_EVENT, getAdminToken } from "../admin/api";
 
 const NAV_ITEMS: NavItem[] = [
@@ -24,7 +25,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`brand${compact ? " brand--compact" : ""}`}>
       <span className="brand__mark">
-        <WhaleMark />
+        <BrandIcon />
       </span>
       <span className="brand__text">
         <strong>Autonotice {SERVICE_VERSION}</strong>
@@ -60,6 +61,7 @@ function isAlertPush(value: unknown): value is AlertPush {
 export function Layout() {
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
+  const bound = useAuthStore((state) => state.bound);
   const mode = useLayoutMode();
   const navigate = useNavigate();
   const location = useLocation();
@@ -179,8 +181,6 @@ export function Layout() {
     };
   }, [token, pushToast]);
 
-  const initial = user?.username.slice(0, 1).toUpperCase() ?? "?";
-
   return (
     <div className={`app app--${mode}`}>
       <div className="ambient" aria-hidden="true" />
@@ -204,7 +204,7 @@ export function Layout() {
           </nav>
           <div className="sidebar__foot">
             <NavLink to="/settings" className="sidebar__account">
-              <span className="avatar">{initial}</span>
+              <UserAvatar qq={bound?.qq} name={user?.username} />
               <span className="sidebar__account-text">
                 <strong>{user?.username ?? "未登录"}</strong>
                 <small>账号设置</small>
@@ -219,8 +219,8 @@ export function Layout() {
         {mode === "tabs" ? (
           <header className="topbar">
             <Brand compact />
-            <NavLink to="/settings" className="avatar" aria-label="账户设置">
-              {initial}
+            <NavLink to="/settings" className="avatar-link" aria-label="账户设置">
+              <UserAvatar qq={bound?.qq} name={user?.username} />
             </NavLink>
           </header>
         ) : null}
