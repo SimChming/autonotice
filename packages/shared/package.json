@@ -1,6 +1,6 @@
 {
   "name": "@autonotice/shared",
-  "version": "2.3.11",
+  "version": "2.3.13",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",

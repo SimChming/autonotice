@@ -25,6 +25,7 @@ import { getRuntimeLlm } from "./llm/runtime.js";
 import { extractSchedules } from "./pipeline/extract.js";
 import { mergeAndSave } from "./pipeline/merge.js";
 import { NotifyHub } from "./notify/hub.js";
+import { startOneBotWatchdog } from "./notify/onebot-watchdog.js";
 import { startReminderScheduler } from "./scheduler/reminders.js";
 import { fireEventTriggers, startTriggerScheduler } from "./triggers/executor.js";
 import { AdminChatHub } from "./admin/chat-hub.js";
@@ -120,9 +121,11 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
 
   const reminderTask = startReminderScheduler({ db, hub, onebot, logger: app.log });
   const triggerTask = startTriggerScheduler(triggerContext);
+  const onebotWatchdog = startOneBotWatchdog({ db, hub, onebot, logger: app.log });
   app.addHook("onClose", async () => {
     reminderTask.stop();
     triggerTask.stop();
+    onebotWatchdog.stop();
   });
 
   registerAuthRoutes(app, { db, config });

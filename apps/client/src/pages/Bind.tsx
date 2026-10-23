@@ -4,6 +4,7 @@ import type { BindStartResponse } from "@autonotice/shared";
 import { useAuthStore } from "../stores/auth";
 import { api } from "../services/api";
 import { formatDateTime } from "../utils/date";
+import { copyText } from "../utils/clipboard";
 import { CopyIcon, LinkIcon } from "../components/Icons";
 
 export function BindPage() {
@@ -101,12 +102,12 @@ export function BindPage() {
     if (!ticket) {
       return;
     }
-    try {
-      await navigator.clipboard.writeText(ticket.code);
-      setCopied(true);
-    } catch {
+    const ok = await copyText(ticket.code);
+    if (!ok) {
       setError("复制失败，请手动选择绑定码");
+      return;
     }
+    setCopied(true);
   };
 
   const startRebind = () => {

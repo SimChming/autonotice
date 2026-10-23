@@ -110,6 +110,9 @@ export const adminOpsResponseSchema = z.object({
     account: z.string(),
     container: z.string(),
     webuiToken: z.string(),
+    /** 机器人离线时返回当前登录二维码（base64 PNG），在线时为 null。 */
+    qrImage: z.string().nullable(),
+    qrUpdatedAt: z.number().nullable(),
   }),
 });
 

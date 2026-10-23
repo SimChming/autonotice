@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import type { FastifyInstance } from "fastify";
 import {
   adminOpsResponseSchema,
@@ -25,6 +25,17 @@ function readWebuiToken(path: string): string {
     return typeof parsed.token === "string" ? parsed.token : "";
   } catch {
     return "";
+  }
+}
+
+/** 读取 NapCat 当前的登录二维码（宿主机挂载目录），供后台直接扫码。 */
+function readLoginQr(path: string): { image: string | null; updatedAt: number | null } {
+  try {
+    const stat = statSync(path);
+    const image = readFileSync(path).toString("base64");
+    return { image, updatedAt: Math.round(stat.mtimeMs) };
+  } catch {
+    return { image: null, updatedAt: null };
   }
 }
 
@@ -69,6 +80,11 @@ export function registerAdminOpsRoutes(
       }
     }
 
+    // 在线时不需要二维码，避免每次轮询都传图；离线才读取当前扫码图。
+    const qr = onebot.connected
+      ? { image: null, updatedAt: null }
+      : readLoginQr(config.napcat.qrPath);
+
     return adminOpsResponseSchema.parse({
       service: {
         version: SERVICE_VERSION,
@@ -81,6 +97,8 @@ export function registerAdminOpsRoutes(
         account: config.napcat.account,
         container: "autonotice-napcat",
         webuiToken: readWebuiToken(config.napcat.webuiConfigPath),
+        qrImage: qr.image,
+        qrUpdatedAt: qr.updatedAt,
       },
     });
   });

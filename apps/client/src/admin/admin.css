@@ -1295,6 +1295,16 @@
   flex-wrap: wrap;
 }
 
+.admin-qr {
+  display: block;
+  width: 220px;
+  max-width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  background: #fff;
+}
+
 .admin-ops-steps {
   margin: 10px 0 0;
   padding-left: 20px;

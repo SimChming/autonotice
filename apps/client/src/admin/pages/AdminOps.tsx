@@ -6,6 +6,7 @@ import { AdminNotice, AdminPageHead, AdminTag } from "../AdminKit";
 import type { AdminOutletContext } from "../AdminLayout";
 import { adminApi, adminErrorMessage } from "../api";
 import { API_BASE } from "../../services/api";
+import { copyText } from "../../utils/clipboard";
 
 function formatUptime(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -63,13 +64,13 @@ export function AdminOpsPage() {
     if (!data?.napcat.webuiToken) {
       return;
     }
-    try {
-      await navigator.clipboard.writeText(data.napcat.webuiToken);
-      setCopied(true);
-      notify("已复制 NapCat Token", "在 NapCat WebUI 登录页粘贴即可");
-    } catch {
+    const ok = await copyText(data.napcat.webuiToken);
+    if (!ok) {
       setError("复制失败，请手动选择 Token");
+      return;
     }
+    setCopied(true);
+    notify("已复制 NapCat Token", "在 NapCat WebUI 登录页粘贴即可");
   };
 
   const webui = data ? napcatUrl(data.napcat.webuiPath) : "/webui/";
@@ -201,6 +202,34 @@ export function AdminOpsPage() {
               </div>
             </section>
           </div>
+
+          {!data.service.onebotConnected ? (
+            <section className="panel" aria-labelledby="admin-qr">
+              <div className="admin-panel-head">
+                <h2 id="admin-qr">扫码重新登录</h2>
+                <AdminTag tone={data.napcat.qrUpdatedAt ? "accent" : "default"}>
+                  {data.napcat.qrUpdatedAt ? "二维码已就绪" : "等待二维码"}
+                </AdminTag>
+              </div>
+              {data.napcat.qrImage ? (
+                <>
+                  <img
+                    className="admin-qr"
+                    src={`data:image/png;base64,${data.napcat.qrImage}`}
+                    alt="NapCat 登录二维码"
+                  />
+                  <p className="panel-note">
+                    用手机 QQ（账号 {data.napcat.account}）扫码授权。二维码约每 2 分钟自动刷新，
+                    本页每 20 秒同步一次。
+                  </p>
+                </>
+              ) : (
+                <p className="panel-note">
+                  暂未读到登录二维码。NapCat 可能正在重建登录服务，稍等片刻会自动出现。
+                </p>
+              )}
+            </section>
+          ) : null}
 
           <section className="panel" aria-labelledby="admin-ops-runbook">
             <h2 id="admin-ops-runbook">QQ 误封 / 掉线处理</h2>

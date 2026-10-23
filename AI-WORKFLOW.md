@@ -641,4 +641,6 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-23 v2.3.11 图标修复：Android WebView 不支持在 `<img>` 中直接渲染 ICO，左上角 `BrandIcon` 改用 `public/app-icon.png`（由 icon.ico 转出的 256px PNG），ICO 仅保留为浏览器 favicon；桌面/Android 图标资源仍为 icon.ico 转出的 PNG。
 - 2026-10-23 v2.3.11 系统通知：新增 `services/notify.ts`，按平台分发——Android 走 Capacitor LocalNotifications（`ic_stat_icon` + `beep.wav` + 震动）、桌面走 Tauri `send_now` 原生通知、Web 走 Notification API（需 HTTPS）；WS 的 `alert` 与 `alarm` 都会触发系统通知、震动与铃声，设置页新增「系统通知」权限申请与测试按钮；Android 补 VIBRATE 权限、通知小图标与提示音资源。
 - 2026-10-23 v2.3.11 通知可靠性补强：Android 8+ 的声音/震动由通道决定，改为显式 `createChannel`（`autonotice-alerts`，importance 5、`beep.wav`、震动）并在每条通知上指定 `channelId`；普通提醒也带提示音（非仅 urgent）；Web/桌面兜底铃声改为首次点击/按键时解锁 AudioContext，规避浏览器自动播放策略；设置页在原生端异步查询真实权限状态，已授权直接显示「已开启」。
+- 2026-10-23 v2.3.13 复制修复：`navigator.clipboard` 仅在安全上下文可用，通过 HTTP 访问后台/绑定页会直接抛错；新增 `utils/clipboard.ts`（安全上下文走 Clipboard API，否则回退 textarea + `execCommand("copy")`），运维页 Token 与绑定码复制均改用它。
+- 2026-10-23 v2.3.13 掉线处理：腾讯 `KickedOffLine`（登录已失效）不属于容器崩溃，NapCat 会停在二维码登录态；新增反向 WS 看门狗（离线 2 分钟提醒主人、6 小时内不重复），提醒写入 alerts 并通过 WS 系统通知推送；后台运维页在离线时展示 NapCat 当前二维码（`NAPCAT_QR_PATH`，默认 `/opt/autonotice/napcat/cache/qrcode.png`，每 20 秒同步），可直接用手机扫码恢复，无需 SSH 隧道。版本号统一提升到 2.3.13。
 
