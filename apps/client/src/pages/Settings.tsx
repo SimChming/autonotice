@@ -7,6 +7,7 @@ import { ArrowRightIcon, LogoutIcon } from "../components/Icons";
 import { UserAvatar } from "../components/UserAvatar";
 import {
   notificationPermissionState,
+  platformKind,
   requestNotificationPermission,
   sendTestNotification,
   webNotificationsSupported,
@@ -31,7 +32,20 @@ export function SettingsPage() {
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
-    setPermission(notificationPermissionState());
+    if (platformKind() === "web") {
+      setPermission(notificationPermissionState());
+      return;
+    }
+    // 原生端权限是异步查询的：读取当前真实状态，已授权则直接显示「已开启」。
+    let cancelled = false;
+    void requestNotificationPermission().then((granted) => {
+      if (!cancelled) {
+        setPermission(granted ? "granted" : "denied");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const permissionLabel =
@@ -44,8 +58,8 @@ export function SettingsPage() {
           : "尚未授权";
 
   const enableNotifications = async () => {
-    await requestNotificationPermission();
-    setPermission(notificationPermissionState());
+    const granted = await requestNotificationPermission();
+    setPermission(granted ? "granted" : notificationPermissionState());
   };
 
   const testNotification = async () => {

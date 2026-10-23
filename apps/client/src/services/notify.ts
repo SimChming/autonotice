@@ -7,7 +7,31 @@ type PlatformKind = "android" | "desktop" | "web";
 
 interface CapacitorLocalNotifications {
   requestPermissions?: () => Promise<{ display?: string }>;
+  createChannel?: (channel: Record<string, unknown>) => Promise<unknown>;
   schedule?: (options: { notifications: Array<Record<string, unknown>> }) => Promise<unknown>;
+}
+
+/** Android 8+ 的声音/震动由通知通道决定，必须显式建通道并指定 channelId。 */
+const ANDROID_CHANNEL_ID = "autonotice-alerts";
+
+async function ensureAndroidChannel(plugin: CapacitorLocalNotifications): Promise<void> {
+  if (!plugin.createChannel) {
+    return;
+  }
+  try {
+    await plugin.createChannel({
+      id: ANDROID_CHANNEL_ID,
+      name: "日程提醒",
+      description: "日程到点与闹铃提醒，带提示音与震动。",
+      importance: 5,
+      visibility: 1,
+      sound: "beep.wav",
+      vibration: true,
+      lights: true,
+    });
+  } catch {
+    // 通道已存在或系统拒绝时忽略，继续走默认通道。
+  }
 }
 
 interface CapacitorGlobal {
@@ -88,6 +112,9 @@ export async function requestNotificationPermission(): Promise<boolean> {
     const plugin = capacitor()?.Plugins?.LocalNotifications;
     try {
       const result = await plugin?.requestPermissions?.();
+      if (plugin) {
+        await ensureAndroidChannel(plugin);
+      }
       return result?.display === "granted";
     } catch {
       return false;
@@ -122,14 +149,42 @@ export function vibrate(pattern: number | number[]): void {
 
 let audioContext: AudioContext | null = null;
 
-/** 网页/桌面兜底铃声：两声短促提示音。 */
-export function playBeep(times = 2): void {
+type AudioContextCtor = new () => AudioContext;
+
+function audioCtor(): AudioContextCtor | null {
   if (typeof window === "undefined") {
-    return;
+    return null;
   }
-  const Ctor =
-    window.AudioContext ??
-    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  return (
+    (window.AudioContext ??
+      (window as Window & { webkitAudioContext?: AudioContextCtor }).webkitAudioContext) ??
+    null
+  );
+}
+
+/** 首次点击/按键时解锁音频，避免浏览器自动播放策略让提示音静默。 */
+if (typeof window !== "undefined") {
+  const unlock = () => {
+    const Ctor = audioCtor();
+    if (!Ctor) {
+      return;
+    }
+    try {
+      audioContext ??= new Ctor();
+    } catch {
+      return;
+    }
+    void audioContext.resume();
+    window.removeEventListener("pointerdown", unlock);
+    window.removeEventListener("keydown", unlock);
+  };
+  window.addEventListener("pointerdown", unlock);
+  window.addEventListener("keydown", unlock);
+}
+
+/** 网页/桌面兜底铃声：短促提示音。 */
+export function playBeep(times = 2): void {
+  const Ctor = audioCtor();
   if (!Ctor) {
     return;
   }
@@ -178,6 +233,7 @@ export async function sendSystemNotification({
       notificationId = (notificationId + 1) % 2_000_000_000;
       try {
         await plugin.requestPermissions?.();
+        await ensureAndroidChannel(plugin);
         await plugin.schedule({
           notifications: [
             {
@@ -185,7 +241,8 @@ export async function sendSystemNotification({
               title,
               body,
               smallIcon: "ic_stat_icon",
-              sound: alarm ? "beep.wav" : undefined,
+              channelId: ANDROID_CHANNEL_ID,
+              sound: "beep.wav",
               schedule: { at: new Date(Date.now() + 250), allowWhileIdle: true },
               extra: { alarm },
             },
@@ -200,9 +257,7 @@ export async function sendSystemNotification({
       }
     }
     vibrate(alarm ? [300, 150, 300, 150, 500] : [120]);
-    if (alarm) {
-      playBeep(2);
-    }
+    playBeep(alarm ? 3 : 1);
     return;
   }
 
@@ -212,8 +267,8 @@ export async function sendSystemNotification({
       await internals?.invoke?.("send_now", { title, body });
       if (alarm) {
         vibrate([300, 150, 300]);
-        playBeep(2);
       }
+      playBeep(alarm ? 3 : 1);
       return;
     } catch {
       // 继续尝试 Web Notification。
@@ -239,9 +294,7 @@ export async function sendSystemNotification({
   }
 
   vibrate(alarm ? [300, 150, 300, 150, 500] : [120]);
-  if (alarm) {
-    playBeep(2);
-  }
+  playBeep(alarm ? 3 : 1);
 }
 
 /** 设置页「发送测试通知」用。 */
