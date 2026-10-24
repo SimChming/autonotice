@@ -159,6 +159,24 @@ const BUILTIN_SKILLS: Array<Omit<CreateSkillRequest, "version"> & { version?: st
     },
   },
   {
+    id: "tool.tools.install",
+    name: "安装命令行工具",
+    description:
+      "主人专用：在服务端容器内安装 apt 命令行工具（如 wget、jq、unzip），安装结果写入持久化清单，容器重启或更新后自动恢复。params: package=apt 包名。",
+    type: "tool",
+    enabled: true,
+    prompt: "",
+    handler: "tools.install",
+    permissions: "owner",
+    paramsSchema: {
+      type: "object",
+      required: ["package"],
+      properties: {
+        package: { type: "string", description: "apt 包名，例如 wget" },
+      },
+    },
+  },
+  {
     id: "tool.skill.manage",
     name: "技能自迭代",
     description:

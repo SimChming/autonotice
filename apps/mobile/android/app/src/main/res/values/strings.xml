@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Autonotice 3.2.0</string>
-    <string name="title_activity_main">Autonotice 3.2.0</string>
+    <string name="app_name">Autonotice 3.2.1</string>
+    <string name="title_activity_main">Autonotice 3.2.1</string>
     <string name="package_name">com.qqsa.schedule</string>
     <string name="custom_url_scheme">com.qqsa.schedule</string>
 </resources>

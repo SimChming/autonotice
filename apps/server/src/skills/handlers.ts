@@ -10,6 +10,7 @@ import { fetchBinary } from "../pipeline/fetcher.js";
 import { searchWeb } from "../services/websearch.js";
 import { getActivePersona, listSkills, setActivePersona } from "./registry.js";
 import { skills as skillsTable } from "../db/schema.js";
+import { runShell } from "../bot/shell.js";
 
 export interface SkillContext {
   db: Db;
@@ -33,6 +34,7 @@ export const SUPPORTED_HANDLERS = [
   { id: "trigger.cancel", description: "取消触发器（params.id）" },
   { id: "skill.manage", description: "技能自迭代：list/update/create/delete（仅主人）" },
   { id: "web.search", description: "联网搜索（params.query 关键词，params.limit 可选）" },
+  { id: "tools.install", description: "安装并持久化命令行工具（params.package，仅主人）" },
 ] as const;
 
 export class SkillDeniedError extends Error {}
@@ -308,6 +310,18 @@ export async function executeSkill(
       }
       const limit = Number(params.limit ?? 5);
       return searchWeb(query, Number.isFinite(limit) ? limit : 5);
+    }
+
+    case "tools.install": {
+      if (context.qq !== OWNER_QQ) {
+        return "只有主人可以安装命令行工具";
+      }
+      const pkg = String(params.package ?? "").trim();
+      if (!/^[a-z0-9][a-z0-9+.-]{1,40}$/.test(pkg)) {
+        return "包名不合法，只接受小写 apt 包名（例如 wget）";
+      }
+      const result = await runShell(`autonotice-install-tool ${pkg}`);
+      return result.output;
     }
 
     default:

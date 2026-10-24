@@ -46,6 +46,14 @@ COPY --from=build /repo/apps/client/dist ./apps/client/dist
 # 机器人自迭代时可直接读取工程文档
 COPY AI-WORKFLOW.md ./AI-WORKFLOW.md
 
+# 持久化工具：AI 可安装命令行工具，容器重启后由 entrypoint 自动恢复
+COPY deploy/entrypoint.sh ./entrypoint.sh
+COPY deploy/install-tool.sh /usr/local/bin/autonotice-install-tool
+RUN chmod +x ./entrypoint.sh /usr/local/bin/autonotice-install-tool
+
+ENV PATH=/app/data/tools/bin:$PATH
+
 WORKDIR /repo/apps/server
 EXPOSE 8080
+ENTRYPOINT ["/repo/entrypoint.sh"]
 CMD ["node", "dist/index.js"]
