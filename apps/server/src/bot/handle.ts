@@ -34,6 +34,7 @@ export function createBotHandlers(options: HandlerOptions) {
         senderName: message.senderName,
         text: message.text || "（在群里 @ 了你）",
         groupId: message.groupId,
+        messageId: message.messageId,
         send: async (text) => {
           await options.onebot.sendGroupMsg(message.groupId, text);
           // 机器人自己的发言也写入群消息表，供后续"近期群聊上下文"使用。
@@ -68,6 +69,7 @@ export function createBotHandlers(options: HandlerOptions) {
         senderQq: message.senderQq,
         senderName: message.senderName,
         text: message.text,
+        messageId: message.messageId,
         send: async (text) => {
           await options.onebot.sendPrivateMsg(message.senderQq, text);
           options.mirrorPrivate?.({

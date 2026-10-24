@@ -7,7 +7,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
  */
 const config: CapacitorConfig = {
   appId: "com.qqsa.schedule",
-  appName: "Autonotice 3.2.2",
+  appName: "Autonotice 3.3.2",
   webDir: "../client/dist",
   server: {
     url: "http://120.26.224.86:8080",

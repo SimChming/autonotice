@@ -35,4 +35,13 @@ else
   echo "[tools] 暂无持久化工具"
 fi
 
+# 把持久化的 AI 运行记录合并回文档（新容器里的文档是镜像自带的干净版本）。
+NOTES=/app/data/ai-notes.md
+DOC=/repo/AI-WORKFLOW.md
+if [ -s "$NOTES" ] && [ -f "$DOC" ] && ! grep -q '^## AI 运行记录（持久化）' "$DOC"; then
+  printf '\n## AI 运行记录（持久化）\n\n' >> "$DOC"
+  cat "$NOTES" >> "$DOC"
+  echo "[workflow] 已合并 $(wc -l < "$NOTES") 条 AI 运行记录"
+fi
+
 exec "$@"

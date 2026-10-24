@@ -1,4 +1,5 @@
 import type { FastifyBaseLogger } from "fastify";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { OWNER_QQ, type SkillManifest } from "@autonotice/shared";
 import type { Config } from "../config.js";
@@ -35,6 +36,7 @@ export const SUPPORTED_HANDLERS = [
   { id: "skill.manage", description: "技能自迭代：list/update/create/delete（仅主人）" },
   { id: "web.search", description: "联网搜索（params.query 关键词，params.limit 可选）" },
   { id: "tools.install", description: "安装并持久化命令行工具（params.package，仅主人）" },
+  { id: "workflow.log", description: "记录环境改动到 AI-WORKFLOW.md（params.content，仅主人）" },
 ] as const;
 
 export class SkillDeniedError extends Error {}
@@ -334,6 +336,31 @@ export async function executeSkill(
       }
       const result = await runShell(`autonotice-install-tool ${pkg}`);
       return result.output;
+    }
+
+    case "workflow.log": {
+      if (context.qq !== OWNER_QQ) {
+        return "只有主人可以让 AI 记录环境改动";
+      }
+      const content = String(params.content ?? "").trim().slice(0, 300);
+      if (!content) {
+        return "缺少 content（一句话说明改了什么、为什么、怎么验证）";
+      }
+      const ts = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 16).replace("T", " ");
+      const line = `- ${ts} [AI] ${content}\n`;
+      try {
+        mkdirSync("/app/data", { recursive: true });
+        appendFileSync("/app/data/ai-notes.md", line, "utf8");
+
+        const docPath = "/repo/AI-WORKFLOW.md";
+        if (existsSync(docPath) && !readFileSync(docPath, "utf8").includes("## AI 运行记录（持久化）")) {
+          appendFileSync(docPath, "\n## AI 运行记录（持久化）\n\n", "utf8");
+        }
+        appendFileSync(docPath, line, "utf8");
+        return `已记录到 AI-WORKFLOW.md（持久化）：${content}`;
+      } catch (error) {
+        return `记录失败：${error instanceof Error ? error.message : String(error)}`;
+      }
     }
 
     default:

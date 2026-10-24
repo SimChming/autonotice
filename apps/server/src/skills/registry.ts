@@ -178,6 +178,24 @@ const BUILTIN_SKILLS: Array<Omit<CreateSkillRequest, "version"> & { version?: st
     },
   },
   {
+    id: "tool.workflow.log",
+    name: "记录环境改动",
+    description:
+      "主人专用：把本次对运行环境的改动（安装工具、改配置、改技能）写成一句话记录到 AI-WORKFLOW.md；记录持久化到 /app/data/ai-notes.md，容器更新后自动合并回文档。params: content=一句话（≤300字，禁止写密钥/密码/token）。",
+    type: "tool",
+    enabled: true,
+    prompt: "",
+    handler: "workflow.log",
+    permissions: "owner",
+    paramsSchema: {
+      type: "object",
+      required: ["content"],
+      properties: {
+        content: { type: "string", description: "改了什么、为什么、怎么验证" },
+      },
+    },
+  },
+  {
     id: "tool.skill.manage",
     name: "技能自迭代",
     description:

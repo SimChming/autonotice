@@ -55,7 +55,8 @@ COPY AI-WORKFLOW.md ./AI-WORKFLOW.md
 # 持久化工具：AI 可安装命令行工具，容器重启后由 entrypoint 自动恢复
 COPY deploy/entrypoint.sh ./entrypoint.sh
 COPY deploy/install-tool.sh /usr/local/bin/autonotice-install-tool
-RUN chmod +x ./entrypoint.sh /usr/local/bin/autonotice-install-tool
+COPY deploy/workflow-log.sh /usr/local/bin/autonotice-workflow-log
+RUN chmod +x ./entrypoint.sh /usr/local/bin/autonotice-install-tool /usr/local/bin/autonotice-workflow-log
 
 ENV PATH=/app/data/tools/bin:$PATH
 

@@ -9,7 +9,7 @@ import type { LlmClient, LlmMessage } from "../llm/client.js";
 import type { NotifyHub } from "../notify/hub.js";
 import type { OneBotClient } from "../onebot/client.js";
 import { buildSystemPrompt } from "./persona.js";
-import { appendHistory, loadGroupContext, loadRecentHistory, loadSummary, maybeSummarize } from "./history.js";
+import { appendHistory, loadGroupContext, loadGroupContextSince, loadRecentHistory, loadSummary, maybeSummarize } from "./history.js";
 import { recallMemories, saveMemory } from "./memory.js";
 import { runShell } from "./shell.js";
 import { buildInstructionPrompt, buildSkillsPrompt, getActivePersona, getEnabledSkills, getSetting } from "../skills/registry.js";
@@ -55,7 +55,16 @@ export interface ChatInput {
   senderName: string;
   text: string;
   groupId?: string;
+  /** OneBot 消息 id，仅用于排重与调试。 */
+  messageId?: string;
   send: (text: string) => Promise<void>;
+}
+
+/** 回答过程中到达的新消息：会在当前回合里被看到并合并处理。 */
+interface ExtraMessage {
+  text: string;
+  senderQq: string;
+  senderName: string;
 }
 
 export interface ChatDeps {
@@ -83,6 +92,10 @@ function jsonParse(text: string): BotContract | null {
 
 function isOwner(qq: string): boolean {
   return qq === OWNER_QQ;
+}
+
+function senderLabel(qq: string, name?: string): string {
+  return name ? `${name}(QQ${qq})` : `QQ${qq}`;
 }
 
 /** 去重用的归一化：忽略空白与常见标点，避免「同一句话换个标点」重复发送。 */
@@ -124,8 +137,12 @@ function toIso(value: unknown): number | null {
 
 export class BotChat {
   private readonly rateBuckets = new Map<string, number[]>();
-  /** 同一会话串行处理，避免并发回复同一条消息或历史快照互相覆盖。 */
-  private readonly queues = new Map<string, Promise<void>>();
+  /**
+   * 每个会话一个 inbox：回答过程中到达的新消息不再排队等上一条说完，
+   * 而是由正在运行的回合在每轮开始前取走、合并进上下文。
+   */
+  private readonly inbox = new Map<string, ChatInput[]>();
+  private readonly running = new Set<string>();
 
   constructor(private readonly deps: ChatDeps) {}
 
@@ -144,20 +161,71 @@ export class BotChat {
     return true;
   }
 
-  async handle(input: ChatInput): Promise<void> {
-    const previous = this.queues.get(input.sessionKey) ?? Promise.resolve();
-    const task = previous.catch(() => undefined).then(() => this.handleOnce(input));
-    this.queues.set(input.sessionKey, task);
-    try {
-      await task;
-    } finally {
-      if (this.queues.get(input.sessionKey) === task) {
-        this.queues.delete(input.sessionKey);
-      }
+  /** 取出并清空该会话 pending 的新消息。 */
+  private drainInbox(sessionKey: string): ChatInput[] {
+    const pending = this.inbox.get(sessionKey);
+    if (!pending?.length) {
+      return [];
+    }
+    this.inbox.delete(sessionKey);
+    return pending;
+  }
+
+  /** 群里已经通过「最新消息」看过的内容，从 inbox 移除，避免下一回合重复回答。 */
+  private dropInboxByTexts(sessionKey: string, texts: string[]): void {
+    const pending = this.inbox.get(sessionKey);
+    if (!pending?.length) {
+      return;
+    }
+    const seen = new Set(texts.map((text) => text.slice(0, 200)));
+    const rest = pending.filter((item) => !seen.has(item.text.slice(0, 200)));
+    if (rest.length) {
+      this.inbox.set(sessionKey, rest);
+    } else {
+      this.inbox.delete(sessionKey);
     }
   }
 
-  private async handleOnce(input: ChatInput): Promise<void> {
+  async handle(input: ChatInput): Promise<void> {
+    const key = input.sessionKey;
+    const pending = this.inbox.get(key);
+    if (pending) {
+      pending.push(input);
+    } else {
+      this.inbox.set(key, [input]);
+    }
+
+    // 已有回合在跑：新消息会被那个回合在下一轮看到，不再单独排队等待。
+    if (this.running.has(key)) {
+      return;
+    }
+
+    this.running.add(key);
+    try {
+      for (;;) {
+        const batch = this.inbox.get(key);
+        if (!batch?.length) {
+          break;
+        }
+        this.inbox.delete(key);
+        const primary = batch[0]!;
+        const extras: ExtraMessage[] = batch.slice(1).map((item) => ({
+          text: item.text,
+          senderQq: item.senderQq,
+          senderName: item.senderName,
+        }));
+        try {
+          await this.handleOnce(primary, extras);
+        } catch (error) {
+          this.deps.logger.error({ err: error, sessionKey: key }, "对话处理失败");
+        }
+      }
+    } finally {
+      this.running.delete(key);
+    }
+  }
+
+  private async handleOnce(input: ChatInput, extras: ExtraMessage[]): Promise<void> {
     const { db, config, llm, logger, hub } = this.deps;
 
     if (!this.allowed(input.senderQq)) {
@@ -180,19 +248,20 @@ export class BotChat {
     const history = loadRecentHistory(db, input.sessionKey);
     // 群聊全量上下文：包含未 @ 机器人、甚至未绑定用户的消息。
     const groupContext = input.groupId ? loadGroupContext(db, input.groupId, 15) : undefined;
+    let lastGroupMessageId = 0;
     if (groupContext?.length) {
       const last = groupContext[groupContext.length - 1];
-      const currentLabel = input.senderName
-        ? `${input.senderName}(QQ${input.senderQq})`
-        : `QQ${input.senderQq}`;
-      if (last && last.text === input.text.slice(0, 200) && last.senderLabel === currentLabel) {
+      lastGroupMessageId = last?.id ?? 0;
+      if (last && last.text === input.text.slice(0, 200) && last.senderLabel === senderLabel(input.senderQq, input.senderName)) {
         groupContext.pop();
       }
     }
 
     let memories: string[] = [];
     try {
-      memories = await recallMemories(db, config, input.sessionKey, input.senderQq, input.text);
+      // 把本轮附带的新消息也纳入记忆召回，避免只围绕第一条消息检索。
+      const recallText = [input.text, ...extras.map((item) => item.text)].filter(Boolean).join("\n");
+      memories = await recallMemories(db, config, input.sessionKey, input.senderQq, recallText);
     } catch (error) {
       logger.warn({ err: error }, "记忆召回失败");
     }
@@ -221,6 +290,18 @@ export class BotChat {
 
     // prompt 构建完成后再落库，保证本轮消息不会重复出现在历史里。
     appendHistory(db, input.sessionKey, "user", input.senderQq, input.text);
+    for (const extra of extras) {
+      appendHistory(db, input.sessionKey, "user", extra.senderQq, extra.text);
+    }
+    if (extras.length) {
+      messages.push({
+        role: "user",
+        content:
+          `【回答期间又收到的新消息】\n` +
+          extras.map((item) => `- ${senderLabel(item.senderQq, item.senderName)}: ${item.text}`).join("\n") +
+          "\n（先看一眼：和当前任务相关就合并回应；旧回答若已过时立刻收尾，优先回应最新消息，不要重复说过的话。）",
+      });
+    }
 
     const sent = new Set<string>();
     for (const entry of history) {
@@ -249,6 +330,41 @@ export class BotChat {
     let memory: BotContract["memory"] = null;
 
     for (let round = 0; round < maxRounds; round += 1) {
+      // 每轮开始前先看一眼：群聊取比上次更新、且不是自己发的消息；
+      // 私聊则把回答期间新到的消息合并进来，避免「死板地按顺序回答完旧消息」。
+      if (input.groupId) {
+        const freshGroup = loadGroupContextSince(db, input.groupId, lastGroupMessageId, 10)
+          .filter((entry) => entry.senderLabel !== "鲸鱼娘" && entry.text.trim());
+        if (freshGroup.length) {
+          lastGroupMessageId = freshGroup[freshGroup.length - 1]!.id;
+          messages.push({
+            role: "user",
+            content:
+              `【群里刚来了新消息】\n` +
+              freshGroup
+                .map((entry) => `- [${entry.at.slice(11, 19)}] ${entry.senderLabel}: ${entry.text}`)
+                .join("\n") +
+              "\n（先看一眼：相关就顺势回应，不必等上一条彻底说完；不相关或已经回答过就继续手头任务。）",
+          });
+          // 这些消息已经在本回合看过了，从 inbox 移除，避免下一回合重复回答。
+          this.dropInboxByTexts(input.sessionKey, freshGroup.map((entry) => entry.text));
+        }
+      } else {
+        const fresh = this.drainInbox(input.sessionKey);
+        if (fresh.length) {
+          for (const item of fresh) {
+            appendHistory(db, input.sessionKey, "user", item.senderQq, item.text);
+          }
+          messages.push({
+            role: "user",
+            content:
+              `【刚刚又来了新消息】\n` +
+              fresh.map((item) => `- ${senderLabel(item.senderQq, item.senderName)}: ${item.text}`).join("\n") +
+              "\n（先看一眼：新消息更重要就收尾当前回答，优先回应最新内容；不要重复说过的话。）",
+          });
+        }
+      }
+
       let contract: BotContract | null = null;
       try {
         const raw = await llm.chatJson(messages);

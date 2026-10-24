@@ -654,4 +654,17 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-24 v3.2.2 工具策略收紧：运行时镜像预装 wget/curl/jq/unzip/zip/less/procps/tar/gzip/xz（真正长久保存，不依赖启动联网）；`autonotice-install-tool` 只允许白名单包、与 entrypoint 共用 `flock` 锁、apt 更新 60 秒 / 安装 180 秒超时；技能 `tool.tools.install` 仅主人可用，安装必须显式 `confirm=true`，并支持 `action=list` 查看额外持久化清单。persona 明确「优先使用已有工具，安装是最后手段」。
 - 2026-10-24 v3.2.2 密钥泄漏兜底：新增 `apps/server/src/security/leaked-key.ts`，启动时比对运行时密钥的 SHA-256 指纹（仓库只存指纹不存密钥），命中即打 error 日志提醒轮换；CI 增加密钥扫描步骤（`sk-`/`ghp_`/`github_pat_` 命中即失败），防止再次误提交。
 - 2026-10-24 v3.2.2 历史清理残留说明：GitHub 仍可通过已知旧 SHA 访问被重写前的提交（已验证 `61fe9c8` 可读），普通 force push 无法清除 `refs/pull/*` 与服务器缓存；仓库无 fork、无 PR，重新污染风险低。要彻底清除需向 GitHub Support 申请或临时转私有；**密钥轮换仍是唯一根治手段**。版本号统一提升到 3.2.2。
+- 2026-10-24 v3.3.2 对话实时性：`BotChat` 改为每会话一个 inbox，回答期间到达的新消息由正在运行的回合在每轮开始时取走并合并（私聊 drain inbox；群聊按 `messages.id` 增量重读，含未 @ 消息），不再按顺序排队等旧回答说完；已经在本轮看过的群消息会从 inbox 移除，避免下一回合重复回答。persona 明确「先看一眼新消息，旧回答过时就收尾」。
+- 2026-10-24 v3.3.2 环境自迭代与记录：新增技能 `tool.workflow.log`（主人专用，`autonotice-workflow-log`）把环境改动写入 `/app/data/ai-notes.md` 并同步到 `/repo/AI-WORKFLOW.md`；entrypoint 在新容器启动时把持久化记录合并回文档，部署后记录不丢。新增「远程更新规划约定」：规划服务端更新前必须先核对容器/挂载/entrypoint/持久化工具/DB settings/NapCat 现状，部署后回填结果。版本号统一提升到 3.3.2。
+
+***
+
+## 远程更新规划约定（v3.3.2 起）
+
+从本机规划任何服务端更新前，必须先把服务端现状纳入方案，不得只凭旧文档：
+
+1. **查运行时**：`docker ps`、镜像版本、`docker compose` 挂载（`/app/data`、`/opt/autonotice`）、entrypoint、`/app/data/tools/packages.txt`、`/app/data/ai-notes.md`。
+2. **查配置**：`.env` 字段是否齐全、DB settings（模型 / 消息额度 / 人格覆盖）、NapCat 是否在线。
+3. **方案写明**：改动落在镜像层（需重新构建）还是数据卷（持久生效）；entrypoint、工具、文档各自的持久化路径；对容器启动时间的影响。
+4. **部署后回填**：把实际结果写进本文件决策日志；由 AI 做的环境改动用 `tool.workflow.log` 记录。
 
