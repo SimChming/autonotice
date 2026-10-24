@@ -59,6 +59,7 @@ export function loadSummary(db: Db, sessionKey: string): string | null {
 
 export interface GroupContextEntry {
   id: number;
+  senderQq: string;
   senderLabel: string;
   text: string;
   at: string;
@@ -67,6 +68,7 @@ export interface GroupContextEntry {
 function toGroupEntry(row: typeof messages.$inferSelect): GroupContextEntry {
   return {
     id: row.id,
+    senderQq: row.senderQq,
     senderLabel:
       row.senderQq === BOT_QQ
         ? "鲸鱼娘"

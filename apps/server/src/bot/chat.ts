@@ -337,6 +337,9 @@ export class BotChat {
           .filter((entry) => entry.senderLabel !== "鲸鱼娘" && entry.text.trim());
         if (freshGroup.length) {
           lastGroupMessageId = freshGroup[freshGroup.length - 1]!.id;
+          for (const entry of freshGroup) {
+            appendHistory(db, input.sessionKey, "user", entry.senderQq, entry.text);
+          }
           messages.push({
             role: "user",
             content:
