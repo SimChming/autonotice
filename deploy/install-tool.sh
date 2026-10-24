@@ -14,9 +14,16 @@ case "$PKG" in
     ;;
 esac
 
+export DEBIAN_FRONTEND=noninteractive
+# 国内服务器访问 deb.debian.org 经常超时，安装前切到阿里云镜像。
+if [ -f /etc/apt/sources.list.d/debian.sources ]; then
+  sed -i 's|http://deb.debian.org/debian|http://mirrors.aliyun.com/debian|g; s|http://security.debian.org/debian-security|http://mirrors.aliyun.com/debian-security|g' \
+    /etc/apt/sources.list.d/debian.sources
+fi
+
 mkdir -p /app/data/tools
-apt-get update -qq
-apt-get install -y --no-install-recommends "$PKG"
+timeout 180 apt-get update -qq || echo "apt update 超时/失败，继续尝试安装"
+timeout 300 apt-get install -y --no-install-recommends "$PKG"
 
 if ! grep -qx "$PKG" /app/data/tools/packages.txt 2>/dev/null; then
   echo "$PKG" >> /app/data/tools/packages.txt

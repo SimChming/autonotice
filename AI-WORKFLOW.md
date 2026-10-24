@@ -649,6 +649,6 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-24 v3.2.0 精准通知：后台新增 `POST /admin/users/notify`，可按勾选用户或全体发送，`useAi` 时让模型以鲸鱼娘口吻改写后再私聊发送，并写入该用户会话历史，便于 AI 后续衔接。
 - 2026-10-24 v3.2.0 消息额度：单轮条数改为后台可调（`reply.limit.group` 默认 8、`reply.limit.owner_private` 默认 0 即不限、`reply.limit.user_private` 默认 8），主人私聊轮次放宽到 24 轮直至任务完成；不同会话仍按 sessionKey 独立串行，主人私聊进行中不影响群聊与其他用户，prompt 与记忆召回继续严格按会话/发言人隔离。版本号统一提升到 3.2.0。
 - 2026-10-24 v3.2.1 敏感信息清理：已用 `git filter-branch --tree-filter` 重写全部历史（main / v2 / 所有标签），抹除本文档早先记录的 LLM API Key 与后台管理员密码，并强制推送；**此后任何密钥只允许放在服务器 `.env` 或数据库 settings，禁止写入仓库**。注意：已泄露的 Key 应立即在阿里云控制台轮换，历史重写只能降低可见性，不能撤回已发生的泄露。
-- 2026-10-24 v3.2.1 工具持久化：新增 `deploy/install-tool.sh`（`/usr/local/bin/autonotice-install-tool`）与 `deploy/entrypoint.sh`：安装 apt 包后写入 `/app/data/tools/packages.txt`（宿主机 `data/tools`），容器启动时自动补装；`/app/data/tools/bin` 已加入 PATH。新增技能 `tool.tools.install`（仅主人，参数 `package`）供 AI 自主安装 wget/jq 等命令行工具。
+- 2026-10-24 v3.2.1 工具持久化：新增 `deploy/install-tool.sh`（`/usr/local/bin/autonotice-install-tool`）与 `deploy/entrypoint.sh`：安装 apt 包后写入 `/app/data/tools/packages.txt`（宿主机 `data/tools`），容器启动时自动补装；`/app/data/tools/bin` 已加入 PATH。新增技能 `tool.tools.install`（仅主人，参数 `package`）供 AI 自主安装 wget/jq 等命令行工具。两个脚本都会先把 apt 源切到 `mirrors.aliyun.com`（国内访问 deb.debian.org 易超时），并对 apt 命令加 180/300 秒超时，避免容器启动卡死。
 - 2026-10-24 v3.2.1 语气精简：人格 prompt 收紧篇幅——单条目标 80 字、上限 120 字，先结论后细节，禁止修饰词堆叠；颜文字/emoji 一条最多一个，事实与数字不加装饰。版本号统一提升到 3.2.1。
 
