@@ -1,22 +1,30 @@
 import {
   adminLoginResponseSchema,
   adminMemorySchema,
+  adminNotifyResponseSchema,
   adminOpsResponseSchema,
   adminOverviewResponseSchema,
   adminPromptResponseSchema,
   adminSettingsResponseSchema,
   adminShellResponseSchema,
+  adminUserChatResponseSchema,
+  adminUserDetailResponseSchema,
   adminUserListResponseSchema,
   skillListResponseSchema,
   skillManifestSchema,
   type AdminLoginRequest,
   type AdminMemory,
   type AdminMemoryUpdate,
+  type AdminNotifyRequest,
+  type AdminNotifyResponse,
   type AdminOpsResponse,
   type AdminOverviewResponse,
+  type AdminPresence,
   type AdminPromptResponse,
   type AdminSettingsUpdate,
   type AdminShellResponse,
+  type AdminUserChatResponse,
+  type AdminUserDetailResponse,
   type CreateSkillRequest,
   type SkillManifest,
   type UpdateSkillRequest,
@@ -36,6 +44,11 @@ export interface AdminSettings {
     baseUrl: string;
     apiKeyMasked: string;
   };
+  reply: {
+    groupLimit: number;
+    ownerPrivateLimit: number;
+    userPrivateLimit: number;
+  };
 }
 
 export interface AdminUser {
@@ -46,6 +59,9 @@ export interface AdminUser {
   verifiedAt: string | null;
   createdAt: string;
   avatarUrl?: string | null;
+  presence: AdminPresence[];
+  scheduleTotal: number;
+  schedulePending: number;
 }
 
 /** handlers 接口没有共享 schema，按约定形状做轻量校验。 */
@@ -300,6 +316,21 @@ export const adminApi = {
 
   async deleteUser(id: number): Promise<void> {
     await rawRequest(`/admin/users/${id}`, { method: "DELETE" });
+  },
+
+  getUserDetail(id: number): Promise<AdminUserDetailResponse> {
+    return request(`/admin/users/${id}/detail`, adminUserDetailResponseSchema);
+  },
+
+  getUserChat(id: number, limit = 200): Promise<AdminUserChatResponse> {
+    return request(`/admin/users/${id}/chat?limit=${limit}`, adminUserChatResponseSchema);
+  },
+
+  notifyUsers(payload: AdminNotifyRequest): Promise<AdminNotifyResponse> {
+    return request("/admin/users/notify", adminNotifyResponseSchema, {
+      method: "POST",
+      body: payload,
+    });
   },
 
   async chatHistory(limit = 100): Promise<AdminChatHistoryItem[]> {

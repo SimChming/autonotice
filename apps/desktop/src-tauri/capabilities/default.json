@@ -3,6 +3,9 @@
   "identifier": "default",
   "description": "日程助手默认权限：核心 API + 本地通知 + 开机自启",
   "windows": ["main"],
+  "remote": {
+    "urls": ["http://120.26.224.86:8080/*"]
+  },
   "permissions": [
     "core:default",
     "core:event:default",

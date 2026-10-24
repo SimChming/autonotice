@@ -643,4 +643,9 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-23 v2.3.11 通知可靠性补强：Android 8+ 的声音/震动由通道决定，改为显式 `createChannel`（`autonotice-alerts`，importance 5、`beep.wav`、震动）并在每条通知上指定 `channelId`；普通提醒也带提示音（非仅 urgent）；Web/桌面兜底铃声改为首次点击/按键时解锁 AudioContext，规避浏览器自动播放策略；设置页在原生端异步查询真实权限状态，已授权直接显示「已开启」。
 - 2026-10-23 v2.3.13 复制修复：`navigator.clipboard` 仅在安全上下文可用，通过 HTTP 访问后台/绑定页会直接抛错；新增 `utils/clipboard.ts`（安全上下文走 Clipboard API，否则回退 textarea + `execCommand("copy")`），运维页 Token 与绑定码复制均改用它。
 - 2026-10-23 v2.3.13 掉线处理：腾讯 `KickedOffLine`（登录已失效）不属于容器崩溃，NapCat 会停在二维码登录态；新增反向 WS 看门狗（离线 2 分钟提醒主人、6 小时内不重复），提醒写入 alerts 并通过 WS 系统通知推送；后台运维页在离线时展示 NapCat 当前二维码（`NAPCAT_QR_PATH`，默认 `/opt/autonotice/napcat/cache/qrcode.png`，每 20 秒同步），可直接用手机扫码恢复，无需 SSH 隧道。版本号统一提升到 2.3.13。
+- 2026-10-24 v3.2.0 热更新：原生壳改为远程加载服务端界面——Capacitor `server.url = http://120.26.224.86:8080`、Tauri 窗口 `url` 指向同一地址，并在 capability 增加 `remote.urls`；此后服务端部署即完成全端界面更新，无需重新编译 exe/apk。新增 `/api/v1/release`（最新版本 + 安装包直链）与 `/downloads/` 静态下载目录（`DOWNLOAD_DIR`，默认 `/app/data/downloads`）。
+- 2026-10-24 v3.2.0 更新器：客户端新增 `services/update.ts`（壳版本探测：Capacitor App / Tauri `app_version`）、版本比较与 `UpdatePrompt` 横幅；版本过低时提示并提供更新按钮：浏览器刷新、Android 走新增 `AppUpdater` 原生插件（申请「安装未知应用」→ 下载 APK 到缓存 → FileProvider 调起安装）、Windows 通过 Rust `open_url` 打开下载页。桌面壳新增 `app_version`/`open_url` 命令。
+- 2026-10-24 v3.2.0 后台实时状态：客户端连上 WS 后发送 `hello`（平台/界面版本/安装包版本），`NotifyHub` 按 socket 记录多端在线信息；`GET /admin/users` 与 `/admin/users/:id/detail` 返回在线端、日程明细与完成状态、绑定群聊；新增 `/admin/users/:id/chat` 只读 AI 视角私聊记录，后台以弹窗展示。
+- 2026-10-24 v3.2.0 精准通知：后台新增 `POST /admin/users/notify`，可按勾选用户或全体发送，`useAi` 时让模型以鲸鱼娘口吻改写后再私聊发送，并写入该用户会话历史，便于 AI 后续衔接。
+- 2026-10-24 v3.2.0 消息额度：单轮条数改为后台可调（`reply.limit.group` 默认 8、`reply.limit.owner_private` 默认 0 即不限、`reply.limit.user_private` 默认 8），主人私聊轮次放宽到 24 轮直至任务完成；不同会话仍按 sessionKey 独立串行，主人私聊进行中不影响群聊与其他用户，prompt 与记忆召回继续严格按会话/发言人隔离。版本号统一提升到 3.2.0。
 

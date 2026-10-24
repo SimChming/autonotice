@@ -14,6 +14,8 @@ import {
   type NotificationPermissionState,
 } from "../services/notify";
 import { getAdminToken } from "../admin/api";
+import { applyUpdate } from "../services/update";
+import { useUpdateInfo } from "../components/UpdatePrompt";
 
 export function SettingsPage() {
   const user = useAuthStore((state) => state.user);
@@ -30,6 +32,9 @@ export function SettingsPage() {
     notificationPermissionState(),
   );
   const [testing, setTesting] = useState(false);
+  const update = useUpdateInfo();
+  const [updating, setUpdating] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (platformKind() === "web") {
@@ -68,6 +73,21 @@ export function SettingsPage() {
       await sendTestNotification();
     } finally {
       setTesting(false);
+    }
+  };
+
+  const runUpdate = async () => {
+    if (!update.release) {
+      update.refresh();
+      return;
+    }
+    setUpdating(true);
+    setUpdateMessage(null);
+    try {
+      const result = await applyUpdate(update.release);
+      setUpdateMessage(result.message);
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -168,6 +188,44 @@ export function SettingsPage() {
         {!webNotificationsSupported() && permission === "unsupported" ? (
           <p className="panel-note">
             浏览器要求 HTTPS（或 localhost）才允许系统通知；当前 HTTP 环境下会保留应用内提醒与提示音。
+          </p>
+        ) : null}
+      </section>
+
+      <section className="panel" aria-labelledby="settings-update">
+        <h2 id="settings-update">版本与更新</h2>
+        <div className="setting-row">
+          <div>
+            <strong>界面版本 v{SERVICE_VERSION}</strong>
+            <span>
+              {update.loading
+                ? "正在检查最新版本…"
+                : update.shell?.platform === "web"
+                  ? update.outdated
+                    ? `服务端已更新到 v${update.release?.version}，刷新即可生效。`
+                    : "网页端随服务端自动更新，始终为最新版本。"
+                  : update.shell?.shellVersion
+                    ? update.outdated
+                      ? `安装包版本 v${update.shell.shellVersion}，可更新到 v${update.release?.version}。`
+                      : `安装包版本 v${update.shell.shellVersion}，已是最新。`
+                    : "正在读取安装包版本…"}
+            </span>
+            {updateMessage ? <span className="update-banner__hint">{updateMessage}</span> : null}
+          </div>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => void runUpdate()}
+            disabled={updating || update.loading}
+          >
+            {updating ? <span className="spinner" aria-hidden="true" /> : null}
+            {updating ? "处理中…" : update.outdated ? "立即更新" : "检查更新"}
+          </button>
+        </div>
+        {update.error ? <p className="panel-note">{update.error}</p> : null}
+        {update.shell?.platform === "android" ? (
+          <p className="panel-note">
+            更新会先申请安装权限，然后下载 APK 并调起系统安装；若系统拦截，请允许「安装未知应用」。
           </p>
         ) : null}
       </section>

@@ -9,6 +9,8 @@ import {
   requestNotificationPermission,
   sendSystemNotification,
 } from "../services/notify";
+import { sendPresenceHello } from "../services/update";
+import { UpdatePrompt } from "./UpdatePrompt";
 import { useLayoutMode } from "../hooks/useLayoutMode";
 import { BellIcon, BrandIcon, CalendarIcon, GroupsIcon, LinkIcon, ShieldIcon, UserIcon } from "./Icons";
 import { TabBar, type NavItem } from "./TabBar";
@@ -158,6 +160,10 @@ export function Layout() {
 
       socket.addEventListener("open", () => {
         attempts = 0;
+        // 上报平台与版本，后台据此展示同一账号的多端在线状态。
+        if (socket) {
+          void sendPresenceHello(socket);
+        }
       });
 
       socket.addEventListener("message", (event: MessageEvent) => {
@@ -272,6 +278,7 @@ export function Layout() {
 
         <main className="content">
           <div className="content__inner">
+            <UpdatePrompt />
             <Outlet />
           </div>
         </main>

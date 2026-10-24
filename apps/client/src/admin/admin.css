@@ -1427,3 +1427,187 @@
     flex-direction: column;
   }
 }
+
+/* ---------- 用户在线状态 / 详情 / AI 对话 ---------- */
+
+.admin-presence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-presence__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+}
+
+.admin-presence__item .status-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.admin-user-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.admin-notify-input {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.admin-notify-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.admin-detail__label {
+  margin: 18px 0 8px;
+  color: var(--muted);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-detail__presence {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-detail__presence li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 12.5px;
+}
+
+.admin-detail__presence li span {
+  color: var(--muted);
+}
+
+.admin-group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-group-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+
+.admin-group-chip small {
+  color: var(--muted);
+}
+
+.admin-detail__schedules {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-schedule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.admin-schedule-row strong {
+  display: block;
+  font-size: 13px;
+}
+
+.admin-schedule-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-chatlog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.admin-chatlog__item {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.admin-chatlog__item--assistant {
+  border-color: rgba(90, 200, 250, 0.28);
+  background: rgba(90, 200, 250, 0.06);
+}
+
+.admin-chatlog__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.admin-chatlog__meta strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.admin-chatlog__item p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

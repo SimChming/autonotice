@@ -26,6 +26,7 @@ const envSchema = z.object({
   NAPCAT_WEBUI_CONFIG: z.string().default("/app/napcat-webui.json"),
   NAPCAT_ACCOUNT: z.string().default("3754609823"),
   NAPCAT_QR_PATH: z.string().default("/opt/autonotice/napcat/cache/qrcode.png"),
+  DOWNLOAD_DIR: z.string().default("/app/data/downloads"),
 });
 
 export interface Config {
@@ -61,6 +62,7 @@ export interface Config {
     account: string;
     qrPath: string;
   };
+  downloadDir: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -106,5 +108,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       account: value.NAPCAT_ACCOUNT,
       qrPath: value.NAPCAT_QR_PATH,
     },
+    downloadDir: value.DOWNLOAD_DIR,
   };
 }

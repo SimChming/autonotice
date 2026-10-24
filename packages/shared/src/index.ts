@@ -11,3 +11,4 @@ export * from "./api/group.js";
 export * from "./api/schedule.js";
 export * from "./api/skill.js";
 export * from "./api/admin.js";
+export * from "./api/release.js";

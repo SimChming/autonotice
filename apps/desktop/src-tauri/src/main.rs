@@ -145,6 +145,35 @@ fn send_now(app: AppHandle, title: String, body: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// 当前安装包版本（供前端判断是否需要更新）。
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// 用系统默认浏览器打开安装包下载页。
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("仅允许打开 http/https 链接".to_string());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", &url])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Rust 侧定时线程（不依赖 WebView 存活）
 // ---------------------------------------------------------------------------
@@ -280,7 +309,9 @@ fn main() {
             take_last_fired,
             set_autostart,
             autostart_enabled,
-            send_now
+            send_now,
+            app_version,
+            open_url
         ])
         .setup(|app| {
             let handle = app.handle().clone();

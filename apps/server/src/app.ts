@@ -15,6 +15,7 @@ import { registerScheduleRoutes } from "./routes/schedules.js";
 import { registerGroupRoutes } from "./routes/groups.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { registerAdminOpsRoutes } from "./routes/admin-ops.js";
+import { registerReleaseRoutes } from "./routes/release.js";
 import { seedSkills } from "./skills/registry.js";
 import { OneBotClient } from "./onebot/client.js";
 import { registerOneBotWs } from "./onebot/ws.js";
@@ -132,8 +133,9 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   registerBindRoutes(app, { db, config, onebot });
   registerGroupRoutes(app, { db, onebot });
   registerScheduleRoutes(app, { db });
-  registerAdminRoutes(app, { db, config, onebot });
+  registerAdminRoutes(app, { db, config, onebot, hub, llm });
   registerAdminOpsRoutes(app, { db, config, onebot });
+  registerReleaseRoutes(app, config);
   adminChatHub.registerRoute(app);
   registerAdminChatRoutes(app, { db, onebot, hub: adminChatHub, bot });
   hub.registerRoute(app);
@@ -190,11 +192,21 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
       if (
         request.method === "GET" &&
         !request.url.startsWith("/api/") &&
-        !request.url.startsWith("/onebot/")
+        !request.url.startsWith("/onebot/") &&
+        !request.url.startsWith("/downloads/")
       ) {
         return reply.sendFile("index.html");
       }
       return reply.code(404).send({ code: "not_found", message: "资源不存在" });
+    });
+  }
+
+  // 安装包直链：客户端更新按钮从这里下载（不依赖 GitHub 可达性）。
+  if (existsSync(config.downloadDir)) {
+    await app.register(fastifyStatic, {
+      root: config.downloadDir,
+      prefix: "/downloads/",
+      decorateReply: false,
     });
   }
 

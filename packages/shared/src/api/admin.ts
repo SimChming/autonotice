@@ -8,8 +8,16 @@ export const adminLlmSettingsSchema = z.object({
   apiKeyMasked: z.string(),
 });
 
+/** 消息额度：群聊固定上限、主人私聊不限（0=不限）、普通用户私聊上限。 */
+export const adminReplySettingsSchema = z.object({
+  groupLimit: z.number().int().min(1).max(50),
+  ownerPrivateLimit: z.number().int().min(0).max(200),
+  userPrivateLimit: z.number().int().min(1).max(50),
+});
+
 export const adminSettingsResponseSchema = z.object({
   llm: adminLlmSettingsSchema,
+  reply: adminReplySettingsSchema,
 });
 
 export const adminSettingsUpdateSchema = z.object({
@@ -18,9 +26,23 @@ export const adminSettingsUpdateSchema = z.object({
   embeddingModel: z.string().trim().min(1).max(120).optional(),
   baseUrl: z.string().trim().url().optional(),
   apiKey: z.string().trim().min(1).optional(),
+  groupLimit: z.number().int().min(1).max(50).optional(),
+  ownerPrivateLimit: z.number().int().min(0).max(200).optional(),
+  userPrivateLimit: z.number().int().min(1).max(50).optional(),
 });
 
 export type AdminSettingsUpdate = z.infer<typeof adminSettingsUpdateSchema>;
+
+/** 客户端在线状态：同一账号可在多端并列显示。 */
+export const adminPresenceSchema = z.object({
+  platform: z.enum(["web", "desktop", "android"]),
+  version: z.string(),
+  shellVersion: z.string().nullable(),
+  connectedAt: z.number(),
+  lastSeen: z.number(),
+});
+
+export type AdminPresence = z.infer<typeof adminPresenceSchema>;
 
 export const adminUserSchema = z.object({
   id: z.number().int().positive(),
@@ -31,6 +53,11 @@ export const adminUserSchema = z.object({
   createdAt: z.string(),
   /** 已绑定 QQ 的头像地址（来自 QQ 头像 CDN）。 */
   avatarUrl: z.string().nullable().optional(),
+  /** 当前在线客户端列表；空数组表示离线。 */
+  presence: z.array(adminPresenceSchema).default([]),
+  /** 日程总数与未完成数。 */
+  scheduleTotal: z.number().int().default(0),
+  schedulePending: z.number().int().default(0),
 });
 
 export const adminUserListResponseSchema = z.object({
@@ -131,3 +158,67 @@ export const adminShellResponseSchema = z.object({
 });
 
 export type AdminShellResponse = z.infer<typeof adminShellResponseSchema>;
+
+/** 后台用户详情：日程明细（含完成状态）与绑定群聊。 */
+export const adminUserScheduleSchema = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  status: z.string(),
+  type: z.string(),
+  priority: z.string(),
+  groupId: z.string().nullable(),
+  groupName: z.string().nullable(),
+  dueAt: z.string().nullable(),
+  remindAt: z.string().nullable(),
+  notes: z.string(),
+  updatedAt: z.string(),
+});
+
+export type AdminUserSchedule = z.infer<typeof adminUserScheduleSchema>;
+
+export const adminUserGroupSchema = z.object({
+  groupId: z.string(),
+  name: z.string(),
+  avatar: z.string(),
+});
+
+export const adminUserDetailResponseSchema = z.object({
+  user: adminUserSchema,
+  presence: z.array(adminPresenceSchema),
+  schedules: z.array(adminUserScheduleSchema),
+  groups: z.array(adminUserGroupSchema),
+});
+
+export type AdminUserDetailResponse = z.infer<typeof adminUserDetailResponseSchema>;
+
+/** AI 视角：某个用户与机器人私聊的完整往来。 */
+export const adminUserChatResponseSchema = z.object({
+  items: z.array(
+    z.object({
+      role: z.enum(["user", "assistant"]),
+      text: z.string(),
+      at: z.string(),
+    }),
+  ),
+});
+
+export type AdminUserChatResponse = z.infer<typeof adminUserChatResponseSchema>;
+
+/** 管理员精准通知：指定用户或全体，可让 AI 按人格组织措辞后私聊发送。 */
+export const adminNotifyRequestSchema = z.object({
+  userIds: z.array(z.number().int().positive()).min(1).max(200).optional(),
+  all: z.boolean().optional(),
+  text: z.string().trim().min(1, "请输入要通知的内容").max(2000, "内容过长"),
+  useAi: z.boolean().default(false),
+});
+
+export type AdminNotifyRequest = z.infer<typeof adminNotifyRequestSchema>;
+
+export const adminNotifyResponseSchema = z.object({
+  sent: z.number().int(),
+  failed: z.number().int(),
+  skipped: z.number().int(),
+  failures: z.array(z.object({ userId: z.number().int(), reason: z.string() })).default([]),
+});
+
+export type AdminNotifyResponse = z.infer<typeof adminNotifyResponseSchema>;

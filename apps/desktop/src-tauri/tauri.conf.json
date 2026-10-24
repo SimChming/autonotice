@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Autonotice 2.3.13",
-  "version": "2.3.13",
+  "productName": "Autonotice 3.2.0",
+  "version": "3.2.0",
   "identifier": "com.autonotice.app",
   "build": {
     "frontendDist": "../../client/dist"
@@ -10,7 +10,8 @@
     "windows": [
       {
         "label": "main",
-        "title": "Autonotice 2.3.13",
+        "title": "Autonotice 3.2.0",
+        "url": "http://120.26.224.86:8080",
         "width": 1080,
         "height": 760,
         "minWidth": 900,

@@ -14,9 +14,13 @@ import { recallMemories, saveMemory } from "./memory.js";
 import { runShell } from "./shell.js";
 import { buildInstructionPrompt, buildSkillsPrompt, getActivePersona, getEnabledSkills, getSetting } from "../skills/registry.js";
 import { executeSkill, SkillDeniedError } from "../skills/handlers.js";
+import {
+  getReplyQuota,
+  limitForScope,
+  roundsForScope,
+  type ReplyScope,
+} from "../services/reply-quota.js";
 
-const MAX_ROUNDS = 8;
-const MAX_SENDS_PER_TURN = 6;
 const RATE_WINDOW_MS = 5 * 60 * 1000;
 const RATE_LIMIT = 3;
 
@@ -162,7 +166,13 @@ export class BotChat {
     }
 
     const binding = db.select().from(bindings).where(eq(bindings.qq, input.senderQq)).get();
-    const identity = isOwner(input.senderQq)
+    const owner = isOwner(input.senderQq);
+    // 不同会话独立排队（见 handle），因此主人私聊进行中不影响群聊与其他用户私聊。
+    const scope: ReplyScope = input.groupId ? "group" : owner ? "ownerPrivate" : "userPrivate";
+    const rawLimit = limitForScope(getReplyQuota(db), scope);
+    const maxSends = rawLimit === 0 ? Number.POSITIVE_INFINITY : rawLimit;
+    const maxRounds = roundsForScope(scope);
+    const identity = owner
       ? "主人（服务器管理员，唯一指定 QQ 3874095145）"
       : `同学（QQ${input.senderQq}，昵称 ${input.senderName || "未知"}）`;
 
@@ -228,7 +238,7 @@ export class BotChat {
     const sendOnce = async (text: string) => {
       const trimmed = text.trim();
       const key = normalizeText(trimmed);
-      if (!trimmed || !key || sent.has(key) || outgoing.length >= MAX_SENDS_PER_TURN) {
+      if (!trimmed || !key || sent.has(key) || outgoing.length >= maxSends) {
         return;
       }
       sent.add(key);
@@ -238,7 +248,7 @@ export class BotChat {
 
     let memory: BotContract["memory"] = null;
 
-    for (let round = 0; round < MAX_ROUNDS; round += 1) {
+    for (let round = 0; round < maxRounds; round += 1) {
       let contract: BotContract | null = null;
       try {
         const raw = await llm.chatJson(messages);
