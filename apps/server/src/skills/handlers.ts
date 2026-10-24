@@ -314,7 +314,19 @@ export async function executeSkill(
 
     case "tools.install": {
       if (context.qq !== OWNER_QQ) {
-        return "只有主人可以安装命令行工具";
+        return "只有主人可以管理命令行工具";
+      }
+      const action = String(params.action ?? "install");
+      if (action === "list") {
+        const result = await runShell("cat /app/data/tools/packages.txt 2>/dev/null");
+        const extra = result.ok ? result.output.trim() : "";
+        return `镜像内置：wget/curl/jq/unzip/zip/less/procps/tar/gzip/xz\n额外持久化：${extra && extra !== "（无输出）" ? extra.replace(/\n/g, ", ") : "（无）"}`;
+      }
+      if (action !== "install") {
+        return "action 只能是 install 或 list";
+      }
+      if (params.confirm !== true) {
+        return "安装新工具前需要主人明确确认；确认后请把 confirm 设为 true 再调用";
       }
       const pkg = String(params.package ?? "").trim();
       if (!/^[a-z0-9][a-z0-9+.-]{1,40}$/.test(pkg)) {

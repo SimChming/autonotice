@@ -162,7 +162,7 @@ const BUILTIN_SKILLS: Array<Omit<CreateSkillRequest, "version"> & { version?: st
     id: "tool.tools.install",
     name: "安装命令行工具",
     description:
-      "主人专用：在服务端容器内安装 apt 命令行工具（如 wget、jq、unzip），安装结果写入持久化清单，容器重启或更新后自动恢复。params: package=apt 包名。",
+      "主人专用：镜像已内置 wget/curl/jq/unzip 等常用工具，优先直接用。确实缺少时才安装（提供 package 与 confirm=true），只允许白名单内的常见命令行工具；action=list 可查看额外持久化清单。",
     type: "tool",
     enabled: true,
     prompt: "",
@@ -170,9 +170,10 @@ const BUILTIN_SKILLS: Array<Omit<CreateSkillRequest, "version"> & { version?: st
     permissions: "owner",
     paramsSchema: {
       type: "object",
-      required: ["package"],
       properties: {
-        package: { type: "string", description: "apt 包名，例如 wget" },
+        action: { type: "string", enum: ["install", "list"], description: "默认 install" },
+        package: { type: "string", description: "apt 包名，例如 sqlite3" },
+        confirm: { type: "boolean", description: "主人明确要求安装时设为 true" },
       },
     },
   },
@@ -218,7 +219,16 @@ export function seedSkills(db: Db): void {
         createdAt: now,
         updatedAt: now,
       })
-      .onConflictDoNothing()
+      .onConflictDoUpdate({
+        target: skills.id,
+        // 内置技能的说明与参数随版本更新；提示词/启停保留管理员的修改。
+        set: {
+          name: item.name,
+          description: item.description,
+          paramsSchema: JSON.stringify(item.paramsSchema),
+          updatedAt: now,
+        },
+      })
       .run();
   }
 }

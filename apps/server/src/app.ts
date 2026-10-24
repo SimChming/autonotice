@@ -33,6 +33,7 @@ import { AdminChatHub } from "./admin/chat-hub.js";
 import { registerAdminChatRoutes } from "./admin/chat-routes.js";
 import { ensureGroup, linkUserGroup, refreshGroupInfo } from "./services/groups.js";
 import { ensureAdmin } from "./services/admin.js";
+import { warnIfLeakedKey } from "./security/leaked-key.js";
 
 /**
  * 装配 Fastify 实例。路由层只做：鉴权 → zod 校验 → 调服务 → 返回（§4.4）。
@@ -63,6 +64,8 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
 
   const onebot = new OneBotClient();
   const llm = createLlmClient(() => getRuntimeLlm(db, config));
+  // 密钥一旦泄露就应视为已泄露：启动时提醒轮换（只比对指纹，不打印密钥）。
+  warnIfLeakedKey([config.llm.apiKey, getRuntimeLlm(db, config).apiKey], app.log);
   const hub = new NotifyHub(app.log);
   const adminChatHub = new AdminChatHub();
   const bot = createBotHandlers({

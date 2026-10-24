@@ -651,4 +651,7 @@ curl http://127.0.0.1:8080/healthz        # 健康检查
 - 2026-10-24 v3.2.1 敏感信息清理：已用 `git filter-branch --tree-filter` 重写全部历史（main / v2 / 所有标签），抹除本文档早先记录的 LLM API Key 与后台管理员密码，并强制推送；**此后任何密钥只允许放在服务器 `.env` 或数据库 settings，禁止写入仓库**。注意：已泄露的 Key 应立即在阿里云控制台轮换，历史重写只能降低可见性，不能撤回已发生的泄露。
 - 2026-10-24 v3.2.1 工具持久化：新增 `deploy/install-tool.sh`（`/usr/local/bin/autonotice-install-tool`）与 `deploy/entrypoint.sh`：安装 apt 包后写入 `/app/data/tools/packages.txt`（宿主机 `data/tools`），容器启动时自动补装；`/app/data/tools/bin` 已加入 PATH。新增技能 `tool.tools.install`（仅主人，参数 `package`）供 AI 自主安装 wget/jq 等命令行工具。两个脚本都会先把 apt 源切到 `mirrors.aliyun.com`（国内访问 deb.debian.org 易超时），并对 apt 命令加 180/300 秒超时，避免容器启动卡死。
 - 2026-10-24 v3.2.1 语气精简：人格 prompt 收紧篇幅——单条目标 80 字、上限 120 字，先结论后细节，禁止修饰词堆叠；颜文字/emoji 一条最多一个，事实与数字不加装饰。版本号统一提升到 3.2.1。
+- 2026-10-24 v3.2.2 工具策略收紧：运行时镜像预装 wget/curl/jq/unzip/zip/less/procps/tar/gzip/xz（真正长久保存，不依赖启动联网）；`autonotice-install-tool` 只允许白名单包、与 entrypoint 共用 `flock` 锁、apt 更新 60 秒 / 安装 180 秒超时；技能 `tool.tools.install` 仅主人可用，安装必须显式 `confirm=true`，并支持 `action=list` 查看额外持久化清单。persona 明确「优先使用已有工具，安装是最后手段」。
+- 2026-10-24 v3.2.2 密钥泄漏兜底：新增 `apps/server/src/security/leaked-key.ts`，启动时比对运行时密钥的 SHA-256 指纹（仓库只存指纹不存密钥），命中即打 error 日志提醒轮换；CI 增加密钥扫描步骤（`sk-`/`ghp_`/`github_pat_` 命中即失败），防止再次误提交。
+- 2026-10-24 v3.2.2 历史清理残留说明：GitHub 仍可通过已知旧 SHA 访问被重写前的提交（已验证 `61fe9c8` 可读），普通 force push 无法清除 `refs/pull/*` 与服务器缓存；仓库无 fork、无 PR，重新污染风险低。要彻底清除需向 GitHub Support 申请或临时转私有；**密钥轮换仍是唯一根治手段**。版本号统一提升到 3.2.2。
 

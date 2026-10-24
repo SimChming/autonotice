@@ -21,6 +21,15 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
+      - name: 密钥泄漏扫描
+        run: |
+          if grep -rInE 'sk-[A-Za-z0-9._-]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}' \
+            --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist .; then
+            echo "检测到疑似密钥，请改用 .env / 数据库 settings 配置"
+            exit 1
+          fi
+          echo "未发现疑似密钥"
+
       - name: 类型检查
         run: pnpm typecheck
 

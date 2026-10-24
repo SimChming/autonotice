@@ -38,6 +38,12 @@ WORKDIR /repo
 COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker:27-cli /usr/local/libexec/docker/cli-plugins/ /usr/local/libexec/docker/cli-plugins/
 
+# 预置常用命令行工具：这是真正的“长久保存”，不依赖启动时联网重装。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       wget curl jq unzip zip less procps ca-certificates tar gzip xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 # 保留 pnpm 的 /repo 目录布局，node_modules 内的相对符号链接才能正确解析
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/packages/shared ./packages/shared
