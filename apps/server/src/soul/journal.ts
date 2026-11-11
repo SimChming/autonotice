@@ -97,7 +97,15 @@ ${chatText}
     ]);
     const parsed = safeJson<{ title?: string; body?: string; mood?: string }>(raw);
     if (!parsed?.body?.trim()) {
-      return false;
+      // 模型偶尔不按 json 返回：只要正文够长，就直接当日记收下。
+      const fallback = raw.replace(/^```(?:json)?|```$/g, "").trim();
+      if (fallback.length < 20) {
+        logger.warn({ day, raw: raw.slice(0, 400) }, "日记内容为空或不是预期 json");
+        return false;
+      }
+      upsertJournal(db, day, `${day} 的日记`, fallback.slice(0, 2000), soul.mood);
+      addEvent(db, "journal", `写了 ${day} 的日记（自由格式）`);
+      return true;
     }
     upsertJournal(db, day, parsed.title ?? `${day} 的日记`, parsed.body.trim(), parsed.mood ?? soul.mood);
     addEvent(db, "journal", `写了 ${day} 的日记：${parsed.title ?? ""}`);
