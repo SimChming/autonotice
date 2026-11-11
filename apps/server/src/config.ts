@@ -27,6 +27,16 @@ const envSchema = z.object({
   NAPCAT_ACCOUNT: z.string().default("3754609823"),
   NAPCAT_QR_PATH: z.string().default("/opt/autonotice/napcat/cache/qrcode.png"),
   DOWNLOAD_DIR: z.string().default("/app/data/downloads"),
+  // --- V4.4.4 彩蛋版：赛博女儿的自主活动 ---
+  SOUL_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  SOUL_OWNER_QQ: z.string().regex(/^\d+$/).default("3874095145"),
+  SOUL_TICK_MINUTES: z.coerce.number().int().min(5).max(240).default(30),
+  SOUL_IDLE_CHANCE: z.coerce.number().int().min(0).max(100).default(35),
+  SOUL_JOURNAL_HOUR: z.coerce.number().int().min(0).max(23).default(23),
+  SOUL_QUIET_START: z.coerce.number().int().min(0).max(23).default(1),
+  SOUL_QUIET_END: z.coerce.number().int().min(0).max(23).default(7),
+  SOUL_TALK_PER_DAY: z.coerce.number().int().min(0).max(20).default(2),
+  SOUL_CHAT_RATE_LIMIT: z.coerce.number().int().min(1).max(500).default(30),
 });
 
 export interface Config {
@@ -63,6 +73,17 @@ export interface Config {
     qrPath: string;
   };
   downloadDir: string;
+  soul: {
+    enabled: boolean;
+    ownerQq: string;
+    tickMinutes: number;
+    idleChance: number;
+    journalHour: number;
+    quietStart: number;
+    quietEnd: number;
+    talkPerDay: number;
+    chatRateLimit: number;
+  };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -109,5 +130,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       qrPath: value.NAPCAT_QR_PATH,
     },
     downloadDir: value.DOWNLOAD_DIR,
+    soul: {
+      enabled: value.SOUL_ENABLED,
+      ownerQq: value.SOUL_OWNER_QQ,
+      tickMinutes: value.SOUL_TICK_MINUTES,
+      idleChance: value.SOUL_IDLE_CHANCE,
+      journalHour: value.SOUL_JOURNAL_HOUR,
+      quietStart: value.SOUL_QUIET_START,
+      quietEnd: value.SOUL_QUIET_END,
+      talkPerDay: value.SOUL_TALK_PER_DAY,
+      chatRateLimit: value.SOUL_CHAT_RATE_LIMIT,
+    },
   };
 }

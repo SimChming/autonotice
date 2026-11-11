@@ -34,7 +34,7 @@ function AdminBrand() {
         <BrandIcon />
       </span>
       <span className="admin-brand__text">
-        <strong>Autonotice {SERVICE_VERSION}</strong>
+        <strong>鲸鱼娘 {SERVICE_VERSION}</strong>
         <small>管理控制台</small>
       </span>
     </div>
@@ -118,7 +118,7 @@ export function AdminLayout({ onLogout }: { onLogout: () => void }) {
             <span className="brand__mark admin-brand__mark">
               <BrandIcon />
             </span>
-            <strong>Autonotice {SERVICE_VERSION} 管理</strong>
+            <strong>鲸鱼娘 {SERVICE_VERSION} 管理</strong>
           </div>
 
           <nav className="admin-tabs" aria-label="管理后台导航">

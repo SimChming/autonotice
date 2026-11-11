@@ -9,13 +9,8 @@ import { resolve } from "node:path";
 import { BOT_QQ, healthResponseSchema, SERVICE_VERSION } from "@autonotice/shared";
 import type { Config } from "./config.js";
 import { createDatabase } from "./db/client.js";
-import { registerAuthRoutes } from "./routes/auth.js";
-import { registerBindRoutes } from "./routes/bind.js";
-import { registerScheduleRoutes } from "./routes/schedules.js";
-import { registerGroupRoutes } from "./routes/groups.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { registerAdminOpsRoutes } from "./routes/admin-ops.js";
-import { registerReleaseRoutes } from "./routes/release.js";
 import { seedSkills } from "./skills/registry.js";
 import { OneBotClient } from "./onebot/client.js";
 import { registerOneBotWs } from "./onebot/ws.js";
@@ -23,17 +18,17 @@ import { createBotHandlers } from "./bot/handle.js";
 import type { IngestDeps } from "./pipeline/ingest.js";
 import { createLlmClient } from "./llm/client.js";
 import { getRuntimeLlm } from "./llm/runtime.js";
-import { extractSchedules } from "./pipeline/extract.js";
-import { mergeAndSave } from "./pipeline/merge.js";
 import { NotifyHub } from "./notify/hub.js";
 import { startOneBotWatchdog } from "./notify/onebot-watchdog.js";
-import { startReminderScheduler } from "./scheduler/reminders.js";
 import { fireEventTriggers, startTriggerScheduler } from "./triggers/executor.js";
 import { AdminChatHub } from "./admin/chat-hub.js";
 import { registerAdminChatRoutes } from "./admin/chat-routes.js";
-import { ensureGroup, linkUserGroup, refreshGroupInfo } from "./services/groups.js";
+import { ensureGroup, refreshGroupInfo } from "./services/groups.js";
 import { ensureAdmin } from "./services/admin.js";
 import { warnIfLeakedKey } from "./security/leaked-key.js";
+import { createSoulLoop } from "./soul/idle.js";
+import { registerSoulRoutes } from "./soul/routes.js";
+import { SOUL_PAGE_HTML } from "./soul/page.js";
 
 /**
  * 装配 Fastify 实例。路由层只做：鉴权 → zod 校验 → 调服务 → 返回（§4.4）。
@@ -83,65 +78,38 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     db,
     bindGroupId: config.bind.groupId,
     onAtBot: bot.onGroupAt,
-    onBoundUserMessage: (userId, message, msgId) => {
-      // 已绑定用户在任何群发言，都自动把该群加入他的多群聊列表。
-      ensureGroup(db, message.groupId);
-      linkUserGroup(db, userId, message.groupId);
-      void (async () => {
-        try {
-          const items = await extractSchedules(llm, message.text);
-          if (!items.length) {
-            return;
-          }
-          const created = await mergeAndSave(
-            { db, llm, logger: app.log },
-            userId,
-            message.groupId,
-            msgId,
-            items,
-          );
-          app.log.info({ userId, msgId, created }, "日程抽取完成");
-        } catch (error) {
-          app.log.warn({ err: error, userId, msgId }, "日程抽取失败");
-        }
-      })();
-    },
+    // V4.4.4 不再做日程抽取，普通群消息只入库供上下文与触发器使用。
+    onBoundUserMessage: () => undefined,
     onGroupMessageEvent: (sessionKey, text) => {
       void fireEventTriggers(triggerContext, sessionKey, text).catch((error: unknown) => {
         app.log.warn({ err: error }, "事件触发器处理失败");
       });
     },
     onGroupSeen: (groupId) => {
+      ensureGroup(db, groupId);
       void refreshGroupInfo(onebot, db, groupId, app.log).catch((error: unknown) => {
         app.log.warn({ err: error, groupId }, "补全群信息失败");
       });
     },
-    onBindConfirmed: (userId, groupId) => {
-      linkUserGroup(db, userId, groupId);
-      void refreshGroupInfo(onebot, db, groupId, app.log).catch(() => undefined);
-    },
+    onBindConfirmed: () => undefined,
     logger: app.log,
   };
 
-  const reminderTask = startReminderScheduler({ db, hub, onebot, logger: app.log });
   const triggerTask = startTriggerScheduler(triggerContext);
   const onebotWatchdog = startOneBotWatchdog({ db, hub, onebot, logger: app.log });
+  const soulLoop = createSoulLoop({ db, config, llm, onebot, logger: app.log });
+  soulLoop.start();
   app.addHook("onClose", async () => {
-    reminderTask.stop();
     triggerTask.stop();
     onebotWatchdog.stop();
+    soulLoop.stop();
   });
 
-  registerAuthRoutes(app, { db, config });
-  registerBindRoutes(app, { db, config, onebot });
-  registerGroupRoutes(app, { db, onebot });
-  registerScheduleRoutes(app, { db });
   registerAdminRoutes(app, { db, config, onebot, hub, llm });
   registerAdminOpsRoutes(app, { db, config, onebot });
-  registerReleaseRoutes(app, config);
   adminChatHub.registerRoute(app);
   registerAdminChatRoutes(app, { db, onebot, hub: adminChatHub, bot });
-  hub.registerRoute(app);
+  registerSoulRoutes(app, { db, config, llm, loop: soulLoop, logger: app.log });
   registerOneBotWs(app, {
     config,
     client: onebot,
@@ -185,6 +153,18 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
       uptime: process.uptime(),
       time: new Date().toISOString(),
     });
+  });
+
+  // V4.4.4：用户端下线，根路径直接进主人的「她的房间」。
+  app.get("/soul", async (_request, reply) => {
+    return reply.type("text/html; charset=utf-8").send(SOUL_PAGE_HTML);
+  });
+  // 用 onRequest 抢先处理根路径：@fastify/static 会占用 GET /，不能再注册同名路由。
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.method === "GET" && request.url.split("?")[0] === "/") {
+      return reply.redirect("/soul");
+    }
+    return undefined;
   });
 
   // 同源托管客户端构建产物（容器内 /repo/apps/client/dist）；SPA 路由回退 index.html

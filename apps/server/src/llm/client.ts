@@ -2,6 +2,9 @@ export interface LlmRuntimeConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** V4.4.4：采样温度（默认 0.85，允许她说话有起伏）。 */
+  temperature?: number;
+  maxTokens?: number;
 }
 
 export interface LlmMessage {
@@ -32,10 +35,11 @@ export function createLlmClient(getConfig: () => LlmRuntimeConfig): LlmClient {
         body: JSON.stringify({
           model: config.model,
           messages,
-          temperature: 0.2,
+          temperature: config.temperature ?? 0.85,
+          max_tokens: config.maxTokens ?? 1600,
           response_format: { type: "json_object" },
         }),
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (!response.ok) {

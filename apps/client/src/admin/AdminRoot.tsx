@@ -52,7 +52,7 @@ function AdminLoginPage({ onLoggedIn }: AdminLoginPageProps) {
             <BrandIcon />
           </span>
           <span className="auth-brand__text">
-            <strong>Autonotice {SERVICE_VERSION}</strong>
+            <strong>鲸鱼娘 {SERVICE_VERSION}</strong>
             <small>Admin Console</small>
           </span>
         </div>

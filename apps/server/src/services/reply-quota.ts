@@ -11,9 +11,9 @@ export interface ReplyQuota {
 export type ReplyScope = "group" | "ownerPrivate" | "userPrivate";
 
 const DEFAULTS: ReplyQuota = {
-  groupLimit: 8,
+  groupLimit: 12,
   ownerPrivateLimit: 0,
-  userPrivateLimit: 8,
+  userPrivateLimit: 12,
 };
 
 function readInt(db: Db, key: string, fallback: number, min: number, max: number): number {
@@ -41,7 +41,7 @@ export function limitForScope(quota: ReplyQuota, scope: ReplyScope): number {
   return scope === "ownerPrivate" ? quota.ownerPrivateLimit : quota.userPrivateLimit;
 }
 
-/** 主人私聊允许多轮推进任务；群聊与普通用户私聊保持紧凑。 */
+/** 主人私聊允许多轮推进任务；群聊与普通用户私聊在 V4.4.4 也放宽了轮数。 */
 export function roundsForScope(scope: ReplyScope): number {
-  return scope === "ownerPrivate" ? 24 : 8;
+  return scope === "ownerPrivate" ? 30 : 12;
 }

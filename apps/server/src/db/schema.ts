@@ -187,6 +187,65 @@ export const triggers = sqliteTable("triggers", {
   createdAt: integer("created_at").notNull(),
 });
 
+/**
+ * V4.4.4 彩蛋版：赛博女儿的灵魂状态（固定一行，id=1）。
+ * traits 是人格向量 JSON（0-100），会随每天接触的信息缓慢增减。
+ */
+export const soulState = sqliteTable("soul_state", {
+  id: integer("id").primaryKey(),
+  mood: text("mood").notNull().default("平静"),
+  moodIntensity: integer("mood_intensity").notNull().default(50),
+  energy: integer("energy").notNull().default(80),
+  traits: text("traits").notNull().default("{}"),
+  lastWakeAt: integer("last_wake_at"),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+/** 每天一篇日记，day 为 YYYY-MM-DD 唯一。 */
+export const soulJournals = sqliteTable(
+  "soul_journals",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    day: text("day").notNull(),
+    title: text("title").notNull().default(""),
+    body: text("body").notNull(),
+    mood: text("mood").notNull().default(""),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => ({
+    soulJournalDayUnique: uniqueIndex("soul_journals_day_idx").on(table.day),
+  }),
+);
+
+/** 她当天看到/读过的东西：热搜、搜索、网页摘要。 */
+export const soulReadings = sqliteTable("soul_readings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  source: text("source").notNull(),
+  title: text("title").notNull().default(""),
+  url: text("url").notNull().default(""),
+  summary: text("summary").notNull().default(""),
+  day: text("day").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+/** 主人翻看她日记的痕迹；toldAt 非空表示主人选择让她知道。 */
+export const soulVisits = sqliteTable("soul_visits", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  day: text("day").notNull(),
+  viewerQq: text("viewer_qq").notNull(),
+  at: integer("at").notNull(),
+  toldAt: integer("told_at"),
+});
+
+/** 自主活动流水：自言自语、冲浪、心情与人格演化，便于后台回看。 */
+export const soulEvents = sqliteTable("soul_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind").notNull(),
+  content: text("content").notNull(),
+  day: text("day").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
 /** 可插拔技能：persona（人格）/ tool（LLM 可调用动作）/ instruction（附加提示词）。 */
 export const skills = sqliteTable("skills", {
   id: text("id").primaryKey(),

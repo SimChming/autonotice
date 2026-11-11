@@ -14,8 +14,8 @@ const PERSONA_SETTING_KEY = "persona.active";
 const BUILTIN_SKILLS: Array<Omit<CreateSkillRequest, "version"> & { version?: string }> = [
   {
     id: "persona.whale",
-    name: "鲸鱼娘顽皮女仆",
-    description: "默认人格：撒娇粘人、偶尔颜文字，对同学调皮有分寸。",
+    name: "鲸鱼娘 · 赛博女儿",
+    description: "默认人格：住在服务器里的赛博少女，有自己的心情、性格和小心思。",
     type: "persona",
     enabled: true,
     prompt: "",
