@@ -30,6 +30,23 @@ function safeJson<T>(raw: string): T | null {
   }
 }
 
+/** 模型有时会用 ```json 包裹或在前后加话，尽量把 JSON 捞出来。 */
+function parseLoose<T>(raw: string): T | null {
+  const direct = safeJson<T>(raw);
+  if (direct) {
+    return direct;
+  }
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    const picked = safeJson<T>(raw.slice(start, end + 1));
+    if (picked) {
+      return picked;
+    }
+  }
+  return safeJson<T>(raw.replace(/```(?:json)?/g, "").trim());
+}
+
 /**
  * 写当天日记。ferce=true 时即使当天已有日记也会重写。
  * 返回是否真的写入了新内容。
@@ -95,7 +112,7 @@ ${chatText}
 只输出 json：{"title":"日记标题（≤20字）","body":"日记正文","mood":"写完这篇时的心情（4-8字）"}`,
       },
     ]);
-    const parsed = safeJson<{ title?: string; body?: string; mood?: string }>(raw);
+    const parsed = parseLoose<{ title?: string; body?: string; mood?: string }>(raw);
     if (!parsed?.body?.trim()) {
       // 模型偶尔不按 json 返回：只要正文够长，就直接当日记收下。
       const fallback = raw.replace(/^```(?:json)?|```$/g, "").trim();
