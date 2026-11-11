@@ -111,16 +111,6 @@ function isFillerReply(text: string): boolean {
   );
 }
 
-function assertNoTarget(params: Record<string, unknown>, owner: boolean): string | null {
-  if (owner) {
-    return null;
-  }
-  if ("target_qq" in params || "target_user_id" in params) {
-    return "普通用户不能操作其他账号";
-  }
-  return null;
-}
-
 export class BotChat {
   private readonly rateBuckets = new Map<string, number[]>();
   /**
