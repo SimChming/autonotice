@@ -5,6 +5,7 @@ import type { Db } from "../db/client.js";
 import { botHistory } from "../db/schema.js";
 import type { LlmClient } from "../llm/client.js";
 import { SOUL_INNER_PERSONA } from "./persona.js";
+import { renderLifeBlock } from "./life.js";
 import {
   addEvent,
   dayKey,
@@ -95,6 +96,8 @@ export async function writeDailyJournal(
         role: "user",
         content: `${renderSoulBlock(soul)}
 
+${renderLifeBlock(db)}
+
 【今天看到的东西】
 ${readingText}
 
@@ -106,8 +109,10 @@ ${chatText}
 
 请写一篇今天的日记。要求：
 - 第一人称，像真的日记，200-300 字；
+- 接着你心里挂着的那件事往下写，写出今天它对你有推进还是更糊涂了；
 - 写下今天真实的感受、想法、在意的小事，不要罗列新闻；
 - 可以有情绪起伏、自言自语、对主人的想念或抱怨；
+- 如果今天你对自己有了新的认识，就自然写进去；
 - 不要写成汇报，不要提"系统""模型"。
 只输出 json：{"title":"日记标题（≤20字）","body":"日记正文","mood":"写完这篇时的心情（4-8字）"}`,
       },
@@ -173,6 +178,8 @@ export async function evolvePersona(
       {
         role: "user",
         content: `${renderSoulBlock(soul)}
+
+${renderLifeBlock(db)}
 
 【今天接触到的信息】
 ${readingText}

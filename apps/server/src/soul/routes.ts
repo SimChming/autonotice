@@ -7,6 +7,16 @@ import type { LlmClient } from "../llm/client.js";
 import { writeDailyJournal, evolvePersona } from "./journal.js";
 import type { SoulLoop } from "./idle.js";
 import {
+  DRIVE_LABELS,
+  KIND_LABELS,
+  addIntention,
+  listIntentions,
+  listReflections,
+  progressIntention,
+  topDrives,
+  type IntentionKind,
+} from "./life.js";
+import {
   dayKey,
   getJournal,
   getSoulSnapshot,
@@ -45,8 +55,59 @@ export function registerSoulRoutes(app: FastifyInstance, options: SoulRouteOptio
         label: TRAIT_LABELS[key],
         value: snapshot.traits[key],
       })),
+      drives: topDrives(db, 5).map((item) => ({
+        name: item.name,
+        label: DRIVE_LABELS[item.name],
+        level: item.level,
+      })),
+      intentions: listIntentions(db, "active", 8).map((row) => ({
+        id: row.id,
+        text: row.text,
+        kind: row.kind,
+        kindLabel: KIND_LABELS[row.kind as IntentionKind] ?? row.kind,
+        progress: row.progress,
+        priority: row.priority,
+        day: row.day,
+        updatedAt: new Date(row.updatedAt).toISOString(),
+      })),
+      reflections: listReflections(db, 6).map((row) => ({
+        id: row.id,
+        content: row.content,
+        importance: row.importance,
+        day: row.day,
+      })),
       enabled: config.soul.enabled,
     };
+  });
+
+  // 主人给她种一个念头：她会真的把它当成自己的事去惦记。
+  app.post("/api/v1/admin/soul/intention", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const body = (request.body ?? {}) as { text?: string; kind?: string; priority?: number };
+    const text = String(body.text ?? "").trim();
+    if (text.length < 2) {
+      return fail(reply, 400, "invalid_request", "想让她惦记的事太短了");
+    }
+    const kinds = ["goal", "question", "worry", "promise"];
+    const kind = (kinds.includes(String(body.kind)) ? body.kind : "goal") as IntentionKind;
+    const id = addIntention(db, text, kind, Number(body.priority) || 70);
+    return { ok: true, id };
+  });
+
+  app.post("/api/v1/admin/soul/intention/:id/done", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const id = Number((request.params as { id?: string }).id);
+    if (!Number.isFinite(id)) {
+      return fail(reply, 400, "invalid_request", "id 不合法");
+    }
+    progressIntention(db, id, "主人说这件事可以放下了。", true);
+    return { ok: true };
   });
 
   app.get("/api/v1/admin/soul/journals", async (request, reply) => {

@@ -43,6 +43,13 @@
       "when": 1794406089094,
       "tag": "0005_colossal_bucky",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795106320143,
+      "tag": "0006_glorious_puff_adder",
+      "breakpoints": true
     }
   ]
 }

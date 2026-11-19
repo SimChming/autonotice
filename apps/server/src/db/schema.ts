@@ -246,6 +246,51 @@ export const soulEvents = sqliteTable("soul_events", {
   createdAt: integer("created_at").notNull(),
 });
 
+/**
+ * 内在驱力（0-100，越高越渴）。随时间自然上涨，被对应活动缓解。
+ * 它是「她此刻为什么想做这件事」的来源，取代原先的随机权重。
+ */
+export const soulDrives = sqliteTable(
+  "soul_drives",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    level: integer("level").notNull().default(50),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => ({
+    soulDriveNameUnique: uniqueIndex("soul_drives_name_idx").on(table.name),
+  }),
+);
+
+/**
+ * 挂念：她想做的事 / 没搞懂的事 / 放不下的心事。
+ * 跨天保留，是行为连续性的核心——她会记得昨天追到一半的线索。
+ */
+export const soulIntentions = sqliteTable("soul_intentions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  text: text("text").notNull(),
+  /** goal 想做的事 | question 没搞懂的事 | worry 放不下的心事 | promise 答应过的事 */
+  kind: text("kind").notNull().default("goal"),
+  /** active 进行中 | done 已经完成 | dropped 自己放弃了 */
+  status: text("status").notNull().default("active"),
+  /** 进展流水，每行一句，累积 */
+  progress: text("progress").notNull().default(""),
+  priority: integer("priority").notNull().default(50),
+  day: text("day").notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+/** 自我认知：从经历里沉淀出的更高层认识，会反过来影响她怎么看待自己。 */
+export const soulReflections = sqliteTable("soul_reflections", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  content: text("content").notNull(),
+  importance: integer("importance").notNull().default(50),
+  day: text("day").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
 /** 可插拔技能：persona（人格）/ tool（LLM 可调用动作）/ instruction（附加提示词）。 */
 export const skills = sqliteTable("skills", {
   id: text("id").primaryKey(),

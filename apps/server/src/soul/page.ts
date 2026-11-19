@@ -7,7 +7,7 @@ export const SOUL_PAGE_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>鲸鱼娘 · 4.4.4</title>
+<title>鲸鱼娘 · 5.0.0</title>
 <style>
   :root {
     --bg: #0f1220; --panel: #171b2e; --panel-2: #1e2439; --line: #2a3150;
@@ -74,11 +74,20 @@ export const SOUL_PAGE_HTML = `<!doctype html>
   .empty { color: var(--muted); font-size: 13px; padding: 20px 0; }
   .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: #2a3150; padding: 10px 18px; border-radius: 10px; font-size: 13px; opacity: 0; transition: .25s; pointer-events: none; }
   .toast.show { opacity: 1; }
+  .bar .fill.warm { background: linear-gradient(90deg, #ffb86b, #ff7ab6); }
+  .mind { padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  .mind-kind { font-size: 11px; color: var(--accent); margin-bottom: 3px; }
+  .mind-text { font-size: 13px; line-height: 1.6; }
+  .mind-progress { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .mind-done { margin-top: 6px; font-size: 11px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
+  .feed-item { padding: 7px 0; border-bottom: 1px dashed var(--line); }
+  .feed-sum { color: var(--text); font-size: 13px; line-height: 1.6; }
+  .feed-src { color: var(--muted); font-size: 11px; margin-top: 2px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>🐋 鲸鱼娘 <span>· 4.4.4</span></h1>
+  <h1>🐋 鲸鱼娘 <span>· 5.0.0</span></h1>
   <div>
     <button id="btn-tick" hidden>让她活动一下</button>
     <button id="btn-journal" hidden>现在写日记</button>
@@ -100,6 +109,8 @@ export const SOUL_PAGE_HTML = `<!doctype html>
         <h3>此刻的心情</h3>
         <div class="mood" id="mood">—</div>
         <div style="color:var(--muted);font-size:12px;margin-top:6px" id="energy">精力 —</div>
+        <h3 style="margin-top:16px">此刻被什么推着</h3>
+        <div id="drives"></div>
       </div>
       <div class="card" style="grid-column: span 2">
         <h3>性格倾向（会随每天接触的信息缓慢变化）</h3>
@@ -116,6 +127,18 @@ export const SOUL_PAGE_HTML = `<!doctype html>
         <div class="empty">左边选一篇日记看看。</div>
       </div>
       <div class="side">
+        <div class="card" style="margin-bottom:16px">
+          <h3>她心里挂着的事</h3>
+          <div class="feed" id="intentions"><div class="empty">还没有</div></div>
+          <div class="row" style="margin-top:10px;display:flex;gap:8px">
+            <input id="seed" placeholder="往她心里放一件事…" style="flex:1" />
+            <button id="btn-seed" style="white-space:nowrap">让她记住</button>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+          <h3>她对自己的认识</h3>
+          <div class="feed" id="reflections"><div class="empty">还没有</div></div>
+        </div>
         <div class="card" style="margin-bottom:16px">
           <h3>今天看到的东西</h3>
           <div class="feed" id="readings"><div class="empty">还没有</div></div>
@@ -170,6 +193,38 @@ export const SOUL_PAGE_HTML = `<!doctype html>
       el("traits").innerHTML = s.traitsList.map(function (t) {
         return '<div class="bar"><label>' + t.label + '</label><div class="track"><div class="fill" style="width:' + t.value + '%"></div></div><b>' + t.value + '</b></div>';
       }).join("");
+      el("drives").innerHTML = (s.drives || []).map(function (d) {
+        return '<div class="bar"><label>' + d.label + '</label><div class="track"><div class="fill warm" style="width:' + d.level + '%"></div></div><b>' + d.level + '</b></div>';
+      }).join("");
+
+      var box = el("intentions");
+      if (!(s.intentions || []).length) {
+        box.innerHTML = '<div class="empty">她心里现在空着</div>';
+      } else {
+        box.innerHTML = s.intentions.map(function (i) {
+          var last = i.progress ? i.progress.split("\n").slice(-1)[0] : "";
+          return '<div class="mind"><div class="mind-kind">' + i.kindLabel + '</div>' +
+            '<div class="mind-text">' + i.text + '</div>' +
+            (last ? '<div class="mind-progress">' + last + '</div>' : '') +
+            '<button class="mind-done" data-id="' + i.id + '">放下了</button></div>';
+        }).join("");
+        Array.prototype.forEach.call(box.querySelectorAll(".mind-done"), function (node) {
+          node.addEventListener("click", function () {
+            api("/api/v1/admin/soul/intention/" + node.getAttribute("data-id") + "/done", { method: "POST" })
+              .then(function () { toast("她从心里放下了"); loadState(); })
+              .catch(function (e) { toast(e.message); });
+          });
+        });
+      }
+
+      var rbox = el("reflections");
+      if (!(s.reflections || []).length) {
+        rbox.innerHTML = '<div class="empty">她还没想清楚自己是谁</div>';
+      } else {
+        rbox.innerHTML = s.reflections.map(function (r) {
+          return '<div class="feed-item"><div class="feed-sum">' + r.content + '</div><div class="feed-src">' + r.day + '</div></div>';
+        }).join("");
+      }
     });
   }
 
@@ -262,6 +317,14 @@ export const SOUL_PAGE_HTML = `<!doctype html>
     token = "";
     localStorage.removeItem("soul_token");
     location.reload();
+  });
+
+  el("btn-seed").addEventListener("click", function () {
+    var text = (el("seed").value || "").trim();
+    if (!text) { toast("先写一件想让她记住的事"); return; }
+    api("/api/v1/admin/soul/intention", { method: "POST", body: JSON.stringify({ text: text, kind: "promise", priority: 80 }) })
+      .then(function () { el("seed").value = ""; toast("她记下了"); loadState(); })
+      .catch(function (error) { toast(error.message); });
   });
 
   el("btn-tick").addEventListener("click", function () {
