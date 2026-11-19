@@ -142,7 +142,8 @@ export const SOUL_PAGE_HTML = `<!doctype html>
   }
   function api(path, options) {
     options = options || {};
-    options.headers = Object.assign({ "Content-Type": "application/json" }, options.headers || {});
+    options.headers = Object.assign({}, options.headers || {});
+    if (options.body) { options.headers["Content-Type"] = "application/json"; }
     if (token) { options.headers.Authorization = "Bearer " + token; }
     return fetch(path, options).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
