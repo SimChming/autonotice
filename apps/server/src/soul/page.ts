@@ -170,6 +170,17 @@ export const SOUL_PAGE_HTML = `<!doctype html>
     if (token) { options.headers.Authorization = "Bearer " + token; }
     return fetch(path, options).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
+        if (res.status === 401 && path.indexOf("/admin/login") < 0) {
+          token = "";
+          localStorage.removeItem("soul_token");
+          el("app").hidden = true;
+          el("login").hidden = false;
+          el("btn-tick").hidden = true;
+          el("btn-journal").hidden = true;
+          el("btn-logout").hidden = true;
+          toast("登录过期了，再进一次就好");
+          throw new Error("登录已过期");
+        }
         if (!res.ok) { throw new Error(data.message || ("HTTP " + res.status)); }
         return data;
       });
@@ -202,7 +213,7 @@ export const SOUL_PAGE_HTML = `<!doctype html>
         box.innerHTML = '<div class="empty">她心里现在空着</div>';
       } else {
         box.innerHTML = s.intentions.map(function (i) {
-          var last = i.progress ? i.progress.split("\n").slice(-1)[0] : "";
+          var last = i.progress ? i.progress.split("\\n").slice(-1)[0] : "";
           return '<div class="mind"><div class="mind-kind">' + i.kindLabel + '</div>' +
             '<div class="mind-text">' + i.text + '</div>' +
             (last ? '<div class="mind-progress">' + last + '</div>' : '') +
@@ -303,6 +314,9 @@ export const SOUL_PAGE_HTML = `<!doctype html>
     var u = el("u").value.trim();
     var p = el("p").value;
     if (!u || !p) { toast("先填账号密码"); return; }
+    var btn = el("btn-login");
+    btn.disabled = true;
+    btn.textContent = "正在进…";
     api("/api/v1/admin/login", { method: "POST", body: JSON.stringify({ username: u, password: p }) })
       .then(function (data) {
         token = data.token;
@@ -310,7 +324,23 @@ export const SOUL_PAGE_HTML = `<!doctype html>
         showApp();
         refresh();
       })
-      .catch(function (error) { toast(error.message); });
+      .catch(function (error) {
+        toast("进不去：" + error.message);
+      })
+      .then(function () {
+        btn.disabled = false;
+        btn.textContent = "进入";
+      });
+  });
+
+  // 输完密码直接回车也能进，不用去找按钮。
+  ["u", "p"].forEach(function (id) {
+    el(id).addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        el("btn-login").click();
+      }
+    });
   });
 
   el("btn-logout").addEventListener("click", function () {
