@@ -43,6 +43,7 @@ const DRIVE_RELIEF: Record<string, Partial<Record<DriveName, number>>> = {
   journal: { expression: -48 },
   talk: { connection: -46, expression: -12 },
   rest: { rest: -36 },
+  hands: { curiosity: -30, novelty: -18, expression: -6 },
 };
 
 const DEFAULT_LEVEL: Record<DriveName, number> = {

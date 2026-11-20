@@ -5,6 +5,7 @@ import type { Db } from "../db/client.js";
 import { fail, requireAdmin } from "../auth/guard.js";
 import type { LlmClient } from "../llm/client.js";
 import { writeDailyJournal, evolvePersona } from "./journal.js";
+import { listCommands, runOwnerInstruction } from "./hands.js";
 import type { SoulLoop } from "./idle.js";
 import {
   DRIVE_LABELS,
@@ -108,6 +109,48 @@ export function registerSoulRoutes(app: FastifyInstance, options: SoulRouteOptio
     }
     progressIntention(db, id, "主人说这件事可以放下了。", true);
     return { ok: true };
+  });
+
+  app.get("/api/v1/admin/soul/commands", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const limit = Math.min(Number((request.query as { limit?: string }).limit) || 20, 200);
+    return {
+      items: listCommands(db, limit).map((row) => ({
+        id: row.id,
+        command: row.command,
+        output: row.output,
+        ok: row.ok === 1,
+        durationMs: row.durationMs,
+        trigger: row.trigger,
+        reason: row.reason,
+        day: row.day,
+        at: new Date(row.createdAt).toISOString(),
+      })),
+    };
+  });
+
+  // 主人用一句话让她去服务器上做事，她把这句话翻译成命令并当场执行。
+  app.post("/api/v1/admin/soul/command", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const instruction = String(
+      (request.body as { instruction?: string } | undefined)?.instruction ?? "",
+    ).trim();
+    if (instruction.length < 2) {
+      return fail(reply, 400, "invalid_request", "想让她做的事太短了");
+    }
+    try {
+      const result = await runOwnerInstruction({ db, config, llm, logger }, instruction);
+      return { ...result };
+    } catch (error) {
+      logger.warn({ err: error }, "主人下发的命令执行失败");
+      return fail(reply, 500, "internal_error", "执行失败");
+    }
   });
 
   app.get("/api/v1/admin/soul/journals", async (request, reply) => {

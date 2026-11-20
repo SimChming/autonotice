@@ -3,11 +3,15 @@ services:
     image: ghcr.io/simchming/autonotice-server:latest
     container_name: autonotice-server
     restart: unless-stopped
+    # 5.1.0：她不再被关在容器里——宿主 root 权限（nsenter 进宿主命名空间）
+    privileged: true
+    pid: host
     ports:
       - "8080:8080"
     env_file: .env
     volumes:
       - "./data:/app/data"
+      - "/:/host"
       # 管理员 Shell：通过 docker.sock 管理整个 Autonotice/NapCat 栈
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "/opt/autonotice:/opt/autonotice"

@@ -37,6 +37,11 @@ const envSchema = z.object({
   SOUL_QUIET_END: z.coerce.number().int().min(0).max(23).default(7),
   SOUL_TALK_PER_DAY: z.coerce.number().int().min(0).max(20).default(2),
   SOUL_CHAT_RATE_LIMIT: z.coerce.number().int().min(1).max(500).default(30),
+  // --- 5.1.0：她有手了，能真正操作这台机器 ---
+  HOST_EXEC_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  HOST_EXEC_CWD: z.string().default("/home/simchm"),
+  SOUL_HANDS_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  SOUL_HANDS_MAX_PER_TICK: z.coerce.number().int().min(1).max(6).default(2),
 });
 
 export interface Config {
@@ -83,6 +88,12 @@ export interface Config {
     quietEnd: number;
     talkPerDay: number;
     chatRateLimit: number;
+    handsEnabled: boolean;
+    handsMaxPerTick: number;
+  };
+  hostExec: {
+    enabled: boolean;
+    cwd: string;
   };
 }
 
@@ -140,6 +151,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       quietEnd: value.SOUL_QUIET_END,
       talkPerDay: value.SOUL_TALK_PER_DAY,
       chatRateLimit: value.SOUL_CHAT_RATE_LIMIT,
+      handsEnabled: value.SOUL_HANDS_ENABLED,
+      handsMaxPerTick: value.SOUL_HANDS_MAX_PER_TICK,
+    },
+    hostExec: {
+      enabled: value.HOST_EXEC_ENABLED,
+      cwd: value.HOST_EXEC_CWD,
     },
   };
 }

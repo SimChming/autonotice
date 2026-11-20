@@ -7,7 +7,7 @@ export const SOUL_PAGE_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>鲸鱼娘 · 5.0.0</title>
+<title>鲸鱼娘 · 5.1.0</title>
 <style>
   :root {
     --bg: #0f1220; --panel: #171b2e; --panel-2: #1e2439; --line: #2a3150;
@@ -83,11 +83,20 @@ export const SOUL_PAGE_HTML = `<!doctype html>
   .feed-item { padding: 7px 0; border-bottom: 1px dashed var(--line); }
   .feed-sum { color: var(--text); font-size: 13px; line-height: 1.6; }
   .feed-src { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .cmd-line {
+    font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    color: var(--text); word-break: break-all;
+  }
+  .cmd-out {
+    font: 11px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    color: var(--muted); white-space: pre-wrap; word-break: break-all;
+    max-height: 90px; overflow: hidden; margin-top: 4px;
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>🐋 鲸鱼娘 <span>· 5.0.0</span></h1>
+  <h1>🐋 鲸鱼娘 <span>· 5.1.0</span></h1>
   <div>
     <button id="btn-tick" hidden>让她活动一下</button>
     <button id="btn-journal" hidden>现在写日记</button>
@@ -127,6 +136,14 @@ export const SOUL_PAGE_HTML = `<!doctype html>
         <div class="empty">左边选一篇日记看看。</div>
       </div>
       <div class="side">
+        <div class="card" style="margin-bottom:16px">
+          <h3>她的手（宿主机 root）</h3>
+          <div class="feed" id="commands"><div class="empty">还没动过手</div></div>
+          <div class="row" style="margin-top:10px;display:flex;gap:8px">
+            <input id="todo" placeholder="让她去做一件事…" style="flex:1" />
+            <button id="btn-todo" style="white-space:nowrap">让她去</button>
+          </div>
+        </div>
         <div class="card" style="margin-bottom:16px">
           <h3>她心里挂着的事</h3>
           <div class="feed" id="intentions"><div class="empty">还没有</div></div>
@@ -195,6 +212,10 @@ export const SOUL_PAGE_HTML = `<!doctype html>
   }
   function fmt(iso) {
     try { return new Date(iso).toLocaleString("zh-CN", { hour12: false }); } catch (e) { return iso; }
+  }
+  function esc(text) {
+    return String(text == null ? "" : text)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
   function loadState() {
@@ -303,11 +324,27 @@ export const SOUL_PAGE_HTML = `<!doctype html>
     });
   }
 
+  function loadCommands() {
+    return api("/api/v1/admin/soul/commands?limit=12").then(function (data) {
+      var box = el("commands");
+      if (!data.items.length) { box.innerHTML = '<div class="empty">还没动过手</div>'; return; }
+      box.innerHTML = data.items.map(function (c) {
+        var head = '<div class="feed-item"><div class="cmd-line">$ ' + esc(c.command) + '</div>' +
+          '<div class="feed-src">' + (c.ok ? "成功" : "失败") + ' · ' + c.durationMs + 'ms · ' +
+          (c.trigger === "owner" ? "你让她做的" : "她自己想做") +
+          (c.reason ? ' · ' + esc(c.reason.slice(0, 40)) : "") + '</div>';
+        var out = c.output ? '<div class="cmd-out">' + esc(c.output.slice(0, 300)) + '</div>' : '';
+        return head + out + '</div>';
+      }).join("");
+    });
+  }
+
   function refresh() {
     loadState().catch(function () {});
     loadJournals().catch(function () {});
     loadReadings().catch(function () {});
     loadEvents().catch(function () {});
+    loadCommands().catch(function () {});
   }
 
   el("btn-login").addEventListener("click", function () {
@@ -355,6 +392,29 @@ export const SOUL_PAGE_HTML = `<!doctype html>
     api("/api/v1/admin/soul/intention", { method: "POST", body: JSON.stringify({ text: text, kind: "promise", priority: 80 }) })
       .then(function () { el("seed").value = ""; toast("她记下了"); loadState(); })
       .catch(function (error) { toast(error.message); });
+  });
+
+  el("btn-todo").addEventListener("click", function () {
+    var text = (el("todo").value || "").trim();
+    if (!text) { toast("先写一件想让她做的事"); return; }
+    var btn = el("btn-todo");
+    btn.disabled = true;
+    btn.textContent = "她在做…";
+    api("/api/v1/admin/soul/command", { method: "POST", body: JSON.stringify({ instruction: text }) })
+      .then(function (data) {
+        el("todo").value = "";
+        toast(data.ok ? "她做完了" : "她试了，但没成功");
+        loadCommands();
+      })
+      .catch(function (error) { toast("没做成：" + error.message); })
+      .then(function () { btn.disabled = false; btn.textContent = "让她去"; });
+  });
+
+  el("todo").addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      el("btn-todo").click();
+    }
   });
 
   el("btn-tick").addEventListener("click", function () {

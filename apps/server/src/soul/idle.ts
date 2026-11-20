@@ -15,13 +15,12 @@ import {
   pickIntention,
   progressIntention,
   relieveDrive,
-  renderLifeBlock,
   topDrives,
   type DriveName,
   type IntentionKind,
   type IntentionRow,
 } from "./life.js";
-import { SOUL_INNER_PERSONA } from "./persona.js";
+import { activityHands } from "./hands.js";
 import {
   addEvent,
   addReading,
@@ -32,9 +31,9 @@ import {
   listEvents,
   listReadings,
   patchSoulSnapshot,
-  renderSoulBlock,
   talkedTodayCount,
 } from "./store.js";
+import { innerThought } from "./think.js";
 
 export interface SoulDeps {
   db: Db;
@@ -44,7 +43,7 @@ export interface SoulDeps {
   logger: FastifyBaseLogger;
 }
 
-type Activity = "hot" | "browse" | "monologue" | "talk" | "rest";
+type Activity = "hot" | "browse" | "monologue" | "talk" | "rest" | "hands";
 
 function inQuietHour(hour: number, start: number, end: number): boolean {
   if (start === end) {
@@ -96,32 +95,6 @@ function chooseActivity(drive: DriveName, quiet: boolean, canTalk: boolean): Act
   }
   // curiosity
   return Math.random() < 0.55 ? "browse" : "hot";
-}
-
-/**
- * 一次思考：带上她此刻的状态、驱力、心里的挂念、对自己的认识。
- * 这是 5.0.0 与 4.x 最本质的区别——她每次都从「同一个自己」出发。
- */
-async function innerThought(
-  deps: SoulDeps,
-  instruction: string,
-  intention?: IntentionRow | null,
-): Promise<string> {
-  const soul = getSoulSnapshot(deps.db);
-  const raw = await deps.llm.chatJson([
-    { role: "system", content: SOUL_INNER_PERSONA },
-    {
-      role: "user",
-      content: `${renderSoulBlock(soul)}
-
-${renderLifeBlock(deps.db, intention)}
-
-${instruction}
-只输出 json：{"text":"你此刻真实的想法，一到两句，口语，不要复述设定"}`,
-    },
-  ]);
-  const parsed = parseLoose<{ text?: string }>(raw);
-  return parsed?.text?.trim() ?? "";
 }
 
 /** 推进挂念：让模型判断这次经历有没有让她更靠近答案。 */
@@ -399,12 +372,27 @@ export function createSoulLoop(deps: SoulDeps) {
       const canTalk = talkedTodayCount(db, dayKey()) < config.soul.talkPerDay;
       let activity = chooseActivity(driveName, quiet, canTalk);
 
+      // 5.1.0：她有一双真正的手。好奇攒够了，或者心里挂着件要动手的事，就会想去碰这台机器。
+      if (config.soul.handsEnabled && !quiet) {
+        const actionableGoal =
+          intention?.kind === "goal" &&
+          /服务器|日志|进程|磁盘|内存|端口|装|修|删|备份|配置|重启/.test(intention.text);
+        if (actionableGoal && Math.random() < 0.5) {
+          activity = "hands";
+        } else if (driveName === "curiosity" && Math.random() < 0.35) {
+          activity = "hands";
+        }
+      }
+
       // 防重复：刚看过热搜就别立刻再刷。
       if (activity === "hot" && didRecently(db, ["hot"], 90)) {
         activity = "browse";
       }
       if (activity === "browse" && didRecently(db, ["browse"], 60)) {
         activity = "monologue";
+      }
+      if (activity === "hands" && didRecently(db, ["hands"], 120)) {
+        activity = "browse";
       }
 
       logger.info({ activity, drive: driveName, level: top?.level, intention: intention?.text }, "她醒来了");
@@ -421,6 +409,9 @@ export function createSoulLoop(deps: SoulDeps) {
           break;
         case "rest":
           await activityRest(deps);
+          break;
+        case "hands":
+          await activityHands(deps, intention);
           break;
         default:
           await activityMonologue(deps, intention);

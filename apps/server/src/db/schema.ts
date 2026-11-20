@@ -291,6 +291,20 @@ export const soulReflections = sqliteTable("soul_reflections", {
   createdAt: integer("created_at").notNull(),
 });
 
+/** 她亲手在服务器上执行过的命令：她做过什么、结果如何，都留在这里。 */
+export const soulCommands = sqliteTable("soul_commands", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  command: text("command").notNull(),
+  output: text("output").notNull().default(""),
+  ok: integer("ok").notNull().default(1),
+  durationMs: integer("duration_ms").notNull().default(0),
+  /** self 自己想的 | owner 主人让她做的 */
+  trigger: text("trigger").notNull().default("self"),
+  reason: text("reason").notNull().default(""),
+  day: text("day").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
 /** 可插拔技能：persona（人格）/ tool（LLM 可调用动作）/ instruction（附加提示词）。 */
 export const skills = sqliteTable("skills", {
   id: text("id").primaryKey(),
