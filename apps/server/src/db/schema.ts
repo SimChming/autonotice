@@ -195,6 +195,8 @@ export const soulState = sqliteTable("soul_state", {
   id: integer("id").primaryKey(),
   mood: text("mood").notNull().default("平静"),
   moodIntensity: integer("mood_intensity").notNull().default(50),
+  /** 5.3.0：心情开始褪色的时间锚点，用于让情绪随真实时间回落。 */
+  moodAt: integer("mood_at").notNull().default(0),
   energy: integer("energy").notNull().default(80),
   traits: text("traits").notNull().default("{}"),
   lastWakeAt: integer("last_wake_at"),

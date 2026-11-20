@@ -57,6 +57,8 @@ export const TRAIT_LABELS: Record<keyof SoulTraits, string> = {
 export interface SoulSnapshot {
   mood: string;
   moodIntensity: number;
+  /** 心情开始褪色的锚点时间；只由情绪变化/回落更新，普通状态刷新不影响它。 */
+  moodAt: number;
   energy: number;
   traits: SoulTraits;
   lastWakeAt: number | null;
@@ -91,6 +93,7 @@ export function getSoulSnapshot(db: Db): SoulSnapshot {
     const initial: SoulSnapshot = {
       mood: "平静",
       moodIntensity: 45,
+      moodAt: now,
       energy: 80,
       traits: { ...DEFAULT_TRAITS },
       lastWakeAt: null,
@@ -101,6 +104,7 @@ export function getSoulSnapshot(db: Db): SoulSnapshot {
         id: 1,
         mood: initial.mood,
         moodIntensity: initial.moodIntensity,
+        moodAt: initial.moodAt,
         energy: initial.energy,
         traits: JSON.stringify(initial.traits),
         lastWakeAt: null,
@@ -113,6 +117,7 @@ export function getSoulSnapshot(db: Db): SoulSnapshot {
   return {
     mood: row.mood,
     moodIntensity: clamp(row.moodIntensity),
+    moodAt: row.moodAt || row.updatedAt,
     energy: clamp(row.energy),
     traits: parseTraits(row.traits),
     lastWakeAt: row.lastWakeAt ?? null,
@@ -122,7 +127,7 @@ export function getSoulSnapshot(db: Db): SoulSnapshot {
 
 export function patchSoulSnapshot(
   db: Db,
-  patch: Partial<Pick<SoulSnapshot, "mood" | "moodIntensity" | "energy" | "lastWakeAt">> & {
+  patch: Partial<Pick<SoulSnapshot, "mood" | "moodIntensity" | "moodAt" | "energy" | "lastWakeAt">> & {
     traits?: Partial<SoulTraits>;
   },
 ): SoulSnapshot {
@@ -136,9 +141,12 @@ export function patchSoulSnapshot(
       }
     }
   }
+  const mood = patch.mood ?? current.mood;
   const next: SoulSnapshot = {
-    mood: patch.mood ?? current.mood,
+    mood,
     moodIntensity: patch.moodIntensity === undefined ? current.moodIntensity : clamp(patch.moodIntensity),
+    // 心情文本变了就重新计时；显式传入 moodAt 时以调用方为准。
+    moodAt: patch.moodAt ?? (mood !== current.mood ? Date.now() : current.moodAt),
     energy: patch.energy === undefined ? current.energy : clamp(patch.energy),
     traits,
     lastWakeAt: patch.lastWakeAt === undefined ? current.lastWakeAt : patch.lastWakeAt,
@@ -149,6 +157,7 @@ export function patchSoulSnapshot(
       id: 1,
       mood: next.mood,
       moodIntensity: next.moodIntensity,
+      moodAt: next.moodAt,
       energy: next.energy,
       traits: JSON.stringify(next.traits),
       lastWakeAt: next.lastWakeAt,
@@ -159,6 +168,7 @@ export function patchSoulSnapshot(
       set: {
         mood: next.mood,
         moodIntensity: next.moodIntensity,
+        moodAt: next.moodAt,
         energy: next.energy,
         traits: JSON.stringify(next.traits),
         lastWakeAt: next.lastWakeAt,
@@ -167,6 +177,29 @@ export function patchSoulSnapshot(
     })
     .run();
   return next;
+}
+
+/**
+ * 5.3.0 情绪平衡：情绪不是一直悬在高处的。
+ * 没有新的刺激时，浓度按真实时间回落，最终淡回「平静」。
+ * 用 moodAt 作为锚点，而不是 updatedAt，否则每次 tick 都会把计时清零。
+ */
+export function relaxMood(db: Db, quiet = false): void {
+  const soul = getSoulSnapshot(db);
+  const hours = (Date.now() - soul.moodAt) / 3_600_000;
+  if (hours < 0.5) {
+    return;
+  }
+  const floor = 26;
+  // 比例衰减：刚起的情绪落得快，快淡下去时反而拖得久一点，像真的心情。
+  const tau = quiet ? 10 : 7;
+  const nextIntensity = floor + Math.max(0, soul.moodIntensity - floor) * Math.exp(-hours / tau);
+  const nextMood = nextIntensity <= floor + 5 && soul.mood !== "平静" ? "平静" : soul.mood;
+  const rounded = Math.round(nextIntensity);
+  if (rounded === soul.moodIntensity && nextMood === soul.mood) {
+    return;
+  }
+  patchSoulSnapshot(db, { mood: nextMood, moodIntensity: rounded, moodAt: Date.now() });
 }
 
 /** 文字化的人格/心情块，注入 system prompt。 */

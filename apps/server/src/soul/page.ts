@@ -7,7 +7,7 @@ export const SOUL_PAGE_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>鲸鱼娘 · 5.2.0</title>
+<title>鲸鱼娘 · 5.3.0</title>
 <style>
   :root {
     --bg: #0f1220; --panel: #171b2e; --panel-2: #1e2439; --line: #2a3150;
@@ -96,7 +96,7 @@ export const SOUL_PAGE_HTML = `<!doctype html>
 </head>
 <body>
 <header>
-  <h1>🐋 鲸鱼娘 <span>· 5.2.0</span></h1>
+  <h1>🐋 鲸鱼娘 <span>· 5.3.0</span></h1>
   <div>
     <button id="btn-tick" hidden>让她活动一下</button>
     <button id="btn-journal" hidden>现在写日记</button>

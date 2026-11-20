@@ -21,6 +21,7 @@ import {
   type IntentionRow,
 } from "./life.js";
 import { activityHands } from "./hands.js";
+import { activityCompanion, canCompanion } from "./companion.js";
 import {
   addEvent,
   addReading,
@@ -31,6 +32,7 @@ import {
   listEvents,
   listReadings,
   patchSoulSnapshot,
+  relaxMood,
   talkedTodayCount,
 } from "./store.js";
 import { innerThought } from "./think.js";
@@ -39,11 +41,13 @@ export interface SoulDeps {
   db: Db;
   config: Config;
   llm: LlmClient;
+  /** 固定连本机 llama.cpp 的客户端，用于无聊时聊天。 */
+  companion: LlmClient;
   onebot: OneBotClient;
   logger: FastifyBaseLogger;
 }
 
-type Activity = "hot" | "browse" | "monologue" | "talk" | "rest" | "hands";
+type Activity = "hot" | "browse" | "monologue" | "talk" | "rest" | "hands" | "companion";
 
 function inQuietHour(hour: number, start: number, end: number): boolean {
   if (start === end) {
@@ -147,7 +151,7 @@ async function activityHot(deps: SoulDeps, intention: IntentionRow | null): Prom
   for (const item of topics.slice(0, 6)) {
     addReading(deps.db, item.source, item.title, item.url, item.summary);
   }
-  let picked = topics.slice(0, 3).map((item) => `「${item.title}」`).join("、");
+  const picked = topics.slice(0, 3).map((item) => `「${item.title}」`).join("、");
   let focus: Topic | null = null;
   if (intention) {
     const keyword = intention.text.replace(/[想弄明白是不是为什么关于的\s]/g, "").slice(0, 6);
@@ -335,8 +339,9 @@ export function createSoulLoop(deps: SoulDeps) {
       const hour = hourKey();
       const quiet = inQuietHour(hour, config.soul.quietStart, config.soul.quietEnd);
 
-      // 1. 时间流逝：她越久没活动，某些欲望越强。
+      // 1. 时间流逝：她越久没活动，某些欲望越强；情绪同时缓慢褪色。
       driftDrives(db, quiet);
+      relaxMood(db, quiet);
 
       // 2. 反思与挂念：让她心里始终有连续的东西。
       await maybeReflect(db, llm, logger);
@@ -361,7 +366,13 @@ export function createSoulLoop(deps: SoulDeps) {
 
       // 5. 决定这次要不要动、动什么
       const top = topDrives(db, 1)[0];
-      const chance = planetChance(top?.level ?? 50, quiet);
+      // 什么都不太想、却也没在休息：无聊本身也是一种要做点什么的理由。
+      const bored = (top?.level ?? 0) < 22;
+      const chance = bored
+        ? quiet
+          ? 24
+          : 46
+        : planetChance(top?.level ?? 50, quiet);
       if (Math.random() * 100 >= chance) {
         logger.debug({ drive: top?.name, level: top?.level }, "她这次什么也不想做");
         return;
@@ -384,6 +395,13 @@ export function createSoulLoop(deps: SoulDeps) {
         }
       }
 
+      // 5.3.0：想说话却没人可说，或者单纯无聊时，去找本机另一个模型聊几句。
+      if (!quiet && canCompanion(db, config) && (bored || (driveName === "connection" && !canTalk))) {
+        if (Math.random() < (bored ? 0.55 : 0.4)) {
+          activity = "companion";
+        }
+      }
+
       // 防重复：刚看过热搜就别立刻再刷。
       if (activity === "hot" && didRecently(db, ["hot"], 90)) {
         activity = "browse";
@@ -393,6 +411,9 @@ export function createSoulLoop(deps: SoulDeps) {
       }
       if (activity === "hands" && didRecently(db, ["hands"], 120)) {
         activity = "browse";
+      }
+      if (activity === "companion" && didRecently(db, ["companion"], 150)) {
+        activity = "monologue";
       }
 
       logger.info({ activity, drive: driveName, level: top?.level, intention: intention?.text }, "她醒来了");
@@ -412,6 +433,9 @@ export function createSoulLoop(deps: SoulDeps) {
           break;
         case "hands":
           await activityHands(deps, intention);
+          break;
+        case "companion":
+          await activityCompanion(deps, intention);
           break;
         default:
           await activityMonologue(deps, intention);

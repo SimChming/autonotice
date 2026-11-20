@@ -57,6 +57,13 @@
       "when": 1795140000000,
       "tag": "0007_soul_commands",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1795230000000,
+      "tag": "0008_soul_mood",
+      "breakpoints": true
     }
   ]
 }

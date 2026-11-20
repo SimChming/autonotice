@@ -46,6 +46,9 @@ const envSchema = z.object({
   HOST_EXEC_CWD: z.string().default("/home/simchm"),
   SOUL_HANDS_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
   SOUL_HANDS_MAX_PER_TICK: z.coerce.number().int().min(1).max(6).default(2),
+  // --- 5.3.0：无聊时和本机 llama.cpp 上的模型聊几句 ---
+  SOUL_COMPANION_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  SOUL_COMPANION_PER_DAY: z.coerce.number().int().min(0).max(12).default(3),
 });
 
 export interface Config {
@@ -97,6 +100,8 @@ export interface Config {
     chatRateLimit: number;
     handsEnabled: boolean;
     handsMaxPerTick: number;
+    companionEnabled: boolean;
+    companionPerDay: number;
   };
   hostExec: {
     enabled: boolean;
@@ -163,6 +168,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       chatRateLimit: value.SOUL_CHAT_RATE_LIMIT,
       handsEnabled: value.SOUL_HANDS_ENABLED,
       handsMaxPerTick: value.SOUL_HANDS_MAX_PER_TICK,
+      companionEnabled: value.SOUL_COMPANION_ENABLED,
+      companionPerDay: value.SOUL_COMPANION_PER_DAY,
     },
     hostExec: {
       enabled: value.HOST_EXEC_ENABLED,

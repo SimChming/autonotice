@@ -44,7 +44,12 @@ const DRIVE_RELIEF: Record<string, Partial<Record<DriveName, number>>> = {
   talk: { connection: -46, expression: -12 },
   rest: { rest: -36 },
   hands: { curiosity: -30, novelty: -18, expression: -6 },
+  // 无聊时和本机另一个模型聊几句：既能说说话，也能碰到一点新东西。
+  companion: { connection: -26, expression: -8, curiosity: -10, novelty: -12 },
 };
+
+/** 5.3.0：驱力不再压到 0。人就算刚满足过，也还留着一点「想要」。 */
+const DRIVE_MIN = 8;
 
 const DEFAULT_LEVEL: Record<DriveName, number> = {
   curiosity: 62,
@@ -81,20 +86,6 @@ function parseLoose<T>(raw: string): T | null {
   return null;
 }
 
-function parseLooseArray<T>(raw: string): T[] | null {
-  const start = raw.indexOf("[");
-  const end = raw.lastIndexOf("]");
-  if (start < 0 || end <= start) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(raw.slice(start, end + 1)) as T[];
-    return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
 /* ------------------------------------------------------------------ 驱力 */
 
 export type Drives = Record<DriveName, number>;
@@ -104,7 +95,7 @@ export function getDrives(db: Db): Drives {
   const out = { ...DEFAULT_LEVEL };
   for (const row of rows) {
     if (row.name in out) {
-      out[row.name as DriveName] = clamp(row.level);
+      out[row.name as DriveName] = clamp(row.level, DRIVE_MIN, 100);
     }
   }
   return out;
@@ -112,10 +103,10 @@ export function getDrives(db: Db): Drives {
 
 function saveDrive(db: Db, name: DriveName, level: number): void {
   db.insert(soulDrives)
-    .values({ name, level: clamp(level), updatedAt: Date.now() })
+    .values({ name, level: clamp(level, DRIVE_MIN, 100), updatedAt: Date.now() })
     .onConflictDoUpdate({
       target: soulDrives.name,
-      set: { level: clamp(level), updatedAt: Date.now() },
+      set: { level: clamp(level, DRIVE_MIN, 100), updatedAt: Date.now() },
     })
     .run();
 }

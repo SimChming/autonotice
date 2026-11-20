@@ -73,6 +73,20 @@ export function getRuntimeLlm(db: Db, config: Config) {
   };
 }
 
+/**
+ * 本地「另一个声音」：固定走本机 llama.cpp，和云端/本地对话切换无关。
+ * 她无聊时用它聊几句；没有选本地模型时由调用方直接跳过。
+ */
+export function getCompanionLlm(db: Db, config: Config) {
+  return {
+    baseUrl: getLocalLlmBaseUrl(db, config),
+    apiKey: "local",
+    model: getLocalLlmModel(db, config),
+    temperature: 0.9,
+    maxTokens: 700,
+  };
+}
+
 export function maskKey(key: string): string {
   if (!key) {
     return "";

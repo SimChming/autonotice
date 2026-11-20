@@ -131,10 +131,11 @@ ${chatText}
     }
     upsertJournal(db, day, parsed.title ?? `${day} 的日记`, parsed.body.trim(), parsed.mood ?? soul.mood);
     addEvent(db, "journal", `写了 ${day} 的日记：${parsed.title ?? ""}`);
-    // 写日记本身也会轻微影响心情。
+    // 写日记本身也会轻微影响心情，但幅度有限，避免情绪被单篇日记推到极端。
     patchSoulSnapshot(db, {
       mood: parsed.mood?.slice(0, 40) || soul.mood,
-      moodIntensity: Math.min(100, soul.moodIntensity + 8),
+      moodIntensity: Math.min(92, soul.moodIntensity + 4),
+      moodAt: Date.now(),
     });
     return true;
   } catch (error) {
@@ -146,7 +147,7 @@ ${chatText}
 interface EvolveResult {
   traits?: Partial<Record<keyof SoulTraits, number>>;
   mood?: string;
-  moodIntensity?: number;
+  moodDelta?: number;
   note?: string;
 }
 
@@ -191,9 +192,9 @@ ${eventText}
 规则：
 - 每个维度最多变化 ±3，多数维度应该是 0；
 - 只有真的被触动才调整，不要为了变化而变化；
-- 心情可以有更明显的变化（-20..+20 的浓度）。
+- 心情可以有更明显的变化，但只写「相对现在的变化量」（moodDelta，-20..+20）。
 输出 json：
-{"traits":{"curiosity":0,"warmth":0,"clinginess":0,"playfulness":0,"melancholy":0,"rationality":0,"vitality":0},"mood":"此刻心情（4-8字）","moodIntensity":50,"note":"一句话说明为什么这样变化"}`,
+{"traits":{"curiosity":0,"warmth":0,"clinginess":0,"playfulness":0,"melancholy":0,"rationality":0,"vitality":0},"mood":"此刻心情（4-8字）","moodDelta":0,"note":"一句话说明为什么这样变化"}`,
       },
     ]);
     const parsed = safeJson<EvolveResult>(raw);
@@ -207,13 +208,16 @@ ${eventText}
         traits[key] = Math.max(-3, Math.min(3, Math.round(delta)));
       }
     }
-    const moodIntensity = Number.isFinite(parsed.moodIntensity)
-      ? Math.max(0, Math.min(100, Math.round(parsed.moodIntensity as number)))
-      : soul.moodIntensity;
+    // 5.3.0：心情变化是相对量，并夹在 ±20 内；情绪有惯性，不会被一天的经历推到极端。
+    const delta = Number.isFinite(parsed.moodDelta)
+      ? Math.max(-20, Math.min(20, Math.round(parsed.moodDelta as number)))
+      : 0;
+    const moodIntensity = Math.max(15, Math.min(95, soul.moodIntensity + delta));
     patchSoulSnapshot(db, {
       traits,
       mood: parsed.mood?.slice(0, 40) || soul.mood,
       moodIntensity,
+      moodAt: Date.now(),
     });
     if (parsed.note?.trim()) {
       addEvent(db, "evolve", parsed.note.trim().slice(0, 300));
