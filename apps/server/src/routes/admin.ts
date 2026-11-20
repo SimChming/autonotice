@@ -9,6 +9,7 @@ import {
   adminOverviewResponseSchema,
   adminPromptResponseSchema,
   adminPromptUpdateSchema,
+  adminLlmModelsResponseSchema,
   adminSettingsResponseSchema,
   adminSettingsUpdateSchema,
   adminUserChatResponseSchema,
@@ -17,6 +18,7 @@ import {
   createSkillRequestSchema,
   skillListResponseSchema,
   skillManifestSchema,
+  type AdminLlmModel,
   updateSkillRequestSchema,
 } from "@autonotice/shared";
 import { OWNER_QQ, SERVICE_VERSION, qqAvatarUrl } from "@autonotice/shared";
@@ -27,7 +29,13 @@ import type { OneBotClient } from "../onebot/client.js";
 import type { NotifyHub } from "../notify/hub.js";
 import type { LlmClient } from "../llm/client.js";
 import { fail, requireAdmin } from "../auth/guard.js";
-import { getRuntimeLlm, maskKey } from "../llm/runtime.js";
+import {
+  getCloudLlm,
+  getLlmProvider,
+  getLocalLlmBaseUrl,
+  getLocalLlmModel,
+  maskKey,
+} from "../llm/runtime.js";
 import { getActivePersona, getSetting, listSkills, setSetting, toManifest } from "../skills/registry.js";
 import { SUPPORTED_HANDLERS } from "../skills/handlers.js";
 import { embedText, memorySourceLabel } from "../bot/memory.js";
@@ -47,16 +55,54 @@ const PROMPT_OVERRIDE_KEY = "prompt.persona_override";
 
 /** 模型设置 + 消息额度，读写共用同一结构。 */
 function settingsPayload(db: Db, config: Config) {
-  const runtime = getRuntimeLlm(db, config);
+  // 云端字段始终返回云端配置，避免切到本地后把云端 Key/地址覆盖掉。
+  const cloud = getCloudLlm(db, config);
   return adminSettingsResponseSchema.parse({
     llm: {
-      model: runtime.model,
-      visionModel: runtime.visionModel,
-      embeddingModel: runtime.embeddingModel,
-      baseUrl: runtime.baseUrl,
-      apiKeyMasked: maskKey(runtime.apiKey),
+      provider: getLlmProvider(db),
+      model: cloud.model,
+      visionModel: cloud.visionModel,
+      embeddingModel: cloud.embeddingModel,
+      baseUrl: cloud.baseUrl,
+      apiKeyMasked: maskKey(cloud.apiKey),
+      localBaseUrl: getLocalLlmBaseUrl(db, config),
+      localModel: getLocalLlmModel(db, config),
     },
     reply: getReplyQuota(db),
+  });
+}
+
+/** 兼容不同版本 llama-server 的 /v1/models 形状，只取后台需要的字段。 */
+function parseLlamaModels(payload: unknown): AdminLlmModel[] {
+  const list = (payload as { data?: unknown } | null)?.data;
+  if (!Array.isArray(list)) {
+    return [];
+  }
+  return list.flatMap((item): AdminLlmModel[] => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const record = item as Record<string, unknown>;
+    const id = typeof record.id === "string" ? record.id : "";
+    if (!id) {
+      return [];
+    }
+    const rawStatus = record.status;
+    const status =
+      typeof rawStatus === "string"
+        ? rawStatus
+        : rawStatus && typeof rawStatus === "object" && typeof (rawStatus as { value?: unknown }).value === "string"
+          ? String((rawStatus as { value: string }).value)
+          : "unknown";
+    const meta = (record.meta ?? {}) as Record<string, unknown>;
+    return [
+      {
+        id,
+        status,
+        params: typeof meta.n_params === "number" ? meta.n_params : undefined,
+        sizeBytes: typeof meta.size === "number" ? meta.size : undefined,
+      },
+    ];
   });
 }
 
@@ -183,6 +229,22 @@ export function registerAdminRoutes(
       return fail(reply, 400, "invalid_request", parsed.error.issues[0]?.message ?? "参数不合法");
     }
 
+    if (parsed.data.provider === "local") {
+      const localModel = (parsed.data.localModel ?? getLocalLlmModel(db, config)).trim();
+      if (!localModel) {
+        return fail(reply, 400, "invalid_request", "切换到本地模型前，请先选择一个模型");
+      }
+    }
+
+    if (parsed.data.provider) {
+      setSetting(db, "llm.provider", parsed.data.provider);
+    }
+    if (parsed.data.localBaseUrl) {
+      setSetting(db, "llm.local_base_url", parsed.data.localBaseUrl);
+    }
+    if (parsed.data.localModel !== undefined) {
+      setSetting(db, "llm.local_model", parsed.data.localModel);
+    }
     if (parsed.data.model) {
       setSetting(db, "llm.model", parsed.data.model);
     }
@@ -210,6 +272,35 @@ export function registerAdminRoutes(
     }
 
     return settingsPayload(db, config);
+  });
+
+  // 本地模型列表：直接读 llama-server 的 /v1/models，presets.ini 加模型后刷新即可出现。
+  app.get("/api/v1/admin/llm/models", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const provider = getLlmProvider(db);
+    const baseUrl = getLocalLlmBaseUrl(db, config);
+    try {
+      const response = await fetch(`${baseUrl}/models`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) {
+        throw new Error(`llama-server 返回 HTTP ${response.status}`);
+      }
+      const models = parseLlamaModels(await response.json());
+      return adminLlmModelsResponseSchema.parse({ provider, reachable: true, models });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return adminLlmModelsResponseSchema.parse({
+        provider,
+        reachable: false,
+        models: [],
+        error: message.slice(0, 200),
+      });
+    }
   });
 
   app.get("/api/v1/admin/prompt", async (request, reply) => {
@@ -252,15 +343,16 @@ export function registerAdminRoutes(
     const tags = parsed.data.tags ?? toMemoryItem(db, existing).tags;
     let embedding = existing.embedding;
     if (content !== existing.content) {
-      const runtime = getRuntimeLlm(db, config);
+      // 向量始终走云端，本地模型只接管对话。
+      const cloud = getCloudLlm(db, config);
       const vector = await embedText(
         {
           ...config,
           llm: {
             ...config.llm,
-            baseUrl: runtime.baseUrl,
-            apiKey: runtime.apiKey,
-            embeddingModel: runtime.embeddingModel,
+            baseUrl: cloud.baseUrl,
+            apiKey: cloud.apiKey,
+            embeddingModel: cloud.embeddingModel,
           },
         },
         content,

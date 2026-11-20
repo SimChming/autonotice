@@ -1,12 +1,39 @@
 import { z } from "zod";
 
+/** 对话模型运行位置：云端 OpenAI 兼容网关，或本机 llama.cpp。 */
+export const llmProviderSchema = z.enum(["cloud", "local"]);
+export type LlmProvider = z.infer<typeof llmProviderSchema>;
+
 export const adminLlmSettingsSchema = z.object({
+  provider: llmProviderSchema,
   model: z.string(),
   visionModel: z.string(),
   embeddingModel: z.string(),
   baseUrl: z.string(),
   apiKeyMasked: z.string(),
+  /** 本地 llama.cpp 的 OpenAI 兼容地址（默认经宿主 socat 桥接）。 */
+  localBaseUrl: z.string(),
+  /** 当前选中的本地模型 id（即 presets.ini 里的 section 名）。 */
+  localModel: z.string(),
 });
+
+/** llama-server /v1/models 的条目；不同版本字段略有差异，这里只取需要的。 */
+export const adminLlmModelSchema = z.object({
+  id: z.string(),
+  status: z.string().default("unknown"),
+  params: z.number().optional(),
+  sizeBytes: z.number().optional(),
+});
+
+export const adminLlmModelsResponseSchema = z.object({
+  provider: llmProviderSchema,
+  reachable: z.boolean(),
+  models: z.array(adminLlmModelSchema),
+  error: z.string().optional(),
+});
+
+export type AdminLlmModel = z.infer<typeof adminLlmModelSchema>;
+export type AdminLlmModelsResponse = z.infer<typeof adminLlmModelsResponseSchema>;
 
 /** 消息额度：群聊固定上限、主人私聊不限（0=不限）、普通用户私聊上限。 */
 export const adminReplySettingsSchema = z.object({
@@ -21,11 +48,14 @@ export const adminSettingsResponseSchema = z.object({
 });
 
 export const adminSettingsUpdateSchema = z.object({
+  provider: llmProviderSchema.optional(),
   model: z.string().trim().min(1).max(120).optional(),
   visionModel: z.string().trim().min(1).max(120).optional(),
   embeddingModel: z.string().trim().min(1).max(120).optional(),
   baseUrl: z.string().trim().url().optional(),
   apiKey: z.string().trim().min(1).optional(),
+  localBaseUrl: z.string().trim().url().optional(),
+  localModel: z.string().trim().max(120).optional(),
   groupLimit: z.number().int().min(1).max(50).optional(),
   ownerPrivateLimit: z.number().int().min(0).max(200).optional(),
   userPrivateLimit: z.number().int().min(1).max(50).optional(),

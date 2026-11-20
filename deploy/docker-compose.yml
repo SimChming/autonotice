@@ -8,6 +8,9 @@ services:
     pid: host
     ports:
       - "8080:8080"
+    # 5.2.0：本地 llama.cpp 只监听宿主 127.0.0.1，经宿主 socat 桥接到 172.18.0.1:18081
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file: .env
     volumes:
       - "./data:/app/data"

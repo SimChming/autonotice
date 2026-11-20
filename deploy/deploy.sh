@@ -11,6 +11,14 @@ if [ -f ./autonotice.service ]; then
   systemctl enable autonotice.service >/dev/null 2>&1 || true
 fi
 
+# 本地 llama.cpp 桥接（5.2.0）：把 docker 网关 18081 转发到宿主 127.0.0.1:8080
+if [ -f ./llama-bridge.service ]; then
+  cp ./llama-bridge.service /etc/systemd/system/llama-bridge.service
+  systemctl daemon-reload
+  systemctl enable llama-bridge.service >/dev/null 2>&1 || true
+  systemctl restart llama-bridge.service >/dev/null 2>&1 || true
+fi
+
 echo "[2/3] 启动服务（镜像由 CI 通过 SSH 传入，不在服务器拉取）"
 docker compose up -d server
 

@@ -1,0 +1,16 @@
+[Unit]
+Description=Autonotice: socat bridge to local llama.cpp (172.17.0.1:18081 -> 127.0.0.1:8080)
+Documentation=https://github.com/SimChming/autonotice
+After=docker.service
+Requires=docker.service
+
+[Service]
+# llama-server 只监听 127.0.0.1；容器无法直连宿主回环，这里把 docker0 网关上的
+# 18081 转发进去（容器内 host.docker.internal 即 172.17.0.1）。只绑定 docker0，
+# 不暴露到局域网。
+ExecStart=/usr/bin/socat TCP-LISTEN:18081,bind=172.17.0.1,fork,reuseaddr TCP:127.0.0.1:8080
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

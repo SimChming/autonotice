@@ -1,5 +1,6 @@
 import {
   adminLoginResponseSchema,
+  adminLlmModelsResponseSchema,
   adminMemorySchema,
   adminNotifyResponseSchema,
   adminOpsResponseSchema,
@@ -13,6 +14,7 @@ import {
   skillListResponseSchema,
   skillManifestSchema,
   type AdminLoginRequest,
+  type AdminLlmModelsResponse,
   type AdminMemory,
   type AdminMemoryUpdate,
   type AdminNotifyRequest,
@@ -38,11 +40,14 @@ export const ADMIN_UNAUTHORIZED_EVENT = "autonotice:admin-unauthorized";
 /** 共享包未导出设置响应类型，这里只描述服务端契约形状。 */
 export interface AdminSettings {
   llm: {
+    provider: "cloud" | "local";
     model: string;
     visionModel: string;
     embeddingModel: string;
     baseUrl: string;
     apiKeyMasked: string;
+    localBaseUrl: string;
+    localModel: string;
   };
   reply: {
     groupLimit: number;
@@ -281,6 +286,10 @@ export const adminApi = {
 
   async getSettings(): Promise<AdminSettings> {
     return (await request("/admin/settings", adminSettingsResponseSchema)) as AdminSettings;
+  },
+
+  getLlmModels(): Promise<AdminLlmModelsResponse> {
+    return request("/admin/llm/models", adminLlmModelsResponseSchema);
   },
 
   getPrompt(): Promise<AdminPromptResponse> {

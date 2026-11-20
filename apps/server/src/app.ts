@@ -17,7 +17,7 @@ import { registerOneBotWs } from "./onebot/ws.js";
 import { createBotHandlers } from "./bot/handle.js";
 import type { IngestDeps } from "./pipeline/ingest.js";
 import { createLlmClient } from "./llm/client.js";
-import { getRuntimeLlm } from "./llm/runtime.js";
+import { getCloudLlm, getRuntimeLlm } from "./llm/runtime.js";
 import { NotifyHub } from "./notify/hub.js";
 import { startOneBotWatchdog } from "./notify/onebot-watchdog.js";
 import { fireEventTriggers, startTriggerScheduler } from "./triggers/executor.js";
@@ -60,7 +60,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   const onebot = new OneBotClient();
   const llm = createLlmClient(() => getRuntimeLlm(db, config));
   // 密钥一旦泄露就应视为已泄露：启动时提醒轮换（只比对指纹，不打印密钥）。
-  warnIfLeakedKey([config.llm.apiKey, getRuntimeLlm(db, config).apiKey], app.log);
+  warnIfLeakedKey([config.llm.apiKey, getCloudLlm(db, config).apiKey], app.log);
   const hub = new NotifyHub(app.log);
   const adminChatHub = new AdminChatHub();
   const bot = createBotHandlers({

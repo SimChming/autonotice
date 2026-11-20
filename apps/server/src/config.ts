@@ -14,6 +14,10 @@ const envSchema = z.object({
   LLM_MODEL: z.string().default("deepseek-v4.1-flash"),
   LLM_EMBEDDING_MODEL: z.string().default("text-embedding-v4"),
   LLM_VISION_MODEL: z.string().default("qwen3-vl-plus"),
+  // 5.2.0：对话模型可在云端与本地 llama.cpp 之间切换（本地模型列表来自 presets.ini）
+  LLM_PROVIDER: z.enum(["cloud", "local"]).default("cloud"),
+  LLM_LOCAL_BASE_URL: z.string().default("http://host.docker.internal:18081/v1"),
+  LLM_LOCAL_MODEL: z.string().default(""),
   ADMIN_USERNAME: z.string().default("admin"),
   ADMIN_PASSWORD: z.string().min(8).default("change-me-please"),
   DATABASE_PATH: z.string().default("./data/app.db"),
@@ -61,11 +65,14 @@ export interface Config {
     codeTtlSeconds: number;
   };
   llm: {
+    provider: "cloud" | "local";
     baseUrl: string;
     apiKey: string;
     model: string;
     embeddingModel: string;
     visionModel: string;
+    localBaseUrl: string;
+    localModel: string;
   };
   admin: {
     username: string;
@@ -124,11 +131,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       codeTtlSeconds: value.BIND_CODE_TTL_SECONDS,
     },
     llm: {
+      provider: value.LLM_PROVIDER,
       baseUrl: value.LLM_BASE_URL,
       apiKey: value.LLM_API_KEY,
       model: value.LLM_MODEL,
       embeddingModel: value.LLM_EMBEDDING_MODEL,
       visionModel: value.LLM_VISION_MODEL,
+      localBaseUrl: value.LLM_LOCAL_BASE_URL,
+      localModel: value.LLM_LOCAL_MODEL,
     },
     admin: {
       username: value.ADMIN_USERNAME,
