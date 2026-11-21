@@ -29,6 +29,7 @@ import { warnIfLeakedKey } from "./security/leaked-key.js";
 import { createSoulLoop } from "./soul/idle.js";
 import { registerSoulRoutes } from "./soul/routes.js";
 import { SOUL_PAGE_HTML } from "./soul/page.js";
+import { createAgentKernel } from "./soul/agent/kernel.js";
 
 /**
  * 装配 Fastify 实例。路由层只做：鉴权 → zod 校验 → 调服务 → 返回（§4.4）。
@@ -61,10 +62,31 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   const llm = createLlmClient(() => getRuntimeLlm(db, config));
   // 她无聊时找「另一个声音」：固定本机 llama.cpp，不随对话 provider 切换。
   const companionLlm = createLlmClient(() => getCompanionLlm(db, config));
+  // 5.4.0：注意力分类器也走本地小模型，主要对话仍然用云端。
+  const classifierLlm = createLlmClient(() => getCompanionLlm(db, config));
   // 密钥一旦泄露就应视为已泄露：启动时提醒轮换（只比对指纹，不打印密钥）。
   warnIfLeakedKey([config.llm.apiKey, getCloudLlm(db, config).apiKey], app.log);
   const hub = new NotifyHub(app.log);
   const adminChatHub = new AdminChatHub();
+  const kernel = createAgentKernel({
+    db,
+    config,
+    llm,
+    classifier: classifierLlm,
+    companion: companionLlm,
+    onebot,
+    logger: app.log,
+    onAssistant: (sessionKey, text) => {
+      if (sessionKey === `private:${config.soul.ownerQq}`) {
+        adminChatHub.push({
+          role: "assistant",
+          text,
+          qq: config.soul.ownerQq,
+          at: new Date().toISOString(),
+        });
+      }
+    },
+  });
   const bot = createBotHandlers({
     db,
     config,
@@ -73,7 +95,9 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     onebot,
     logger: app.log,
     mirrorPrivate: (message) => adminChatHub.push(message),
+    agent: kernel.hooks,
   });
+  kernel.attachChat(bot.chat);
   const triggerContext = { db, config, onebot, hub, logger: app.log };
 
   const ingest: IngestDeps = {
@@ -85,6 +109,20 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     onGroupMessageEvent: (sessionKey, text) => {
       void fireEventTriggers(triggerContext, sessionKey, text).catch((error: unknown) => {
         app.log.warn({ err: error }, "事件触发器处理失败");
+      });
+    },
+    onGroupAmbientMessage: (message) => {
+      kernel.emit({
+        source: "qq",
+        type: "group_message",
+        sessionKey: `group:${message.groupId}`,
+        addressed: false,
+        payload: {
+          text: message.text,
+          senderQq: message.senderQq,
+          senderName: message.senderName,
+        },
+        importance: 40,
       });
     },
     onGroupSeen: (groupId) => {
@@ -99,19 +137,36 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
 
   const triggerTask = startTriggerScheduler(triggerContext);
   const onebotWatchdog = startOneBotWatchdog({ db, hub, onebot, logger: app.log });
-  const soulLoop = createSoulLoop({ db, config, llm, companion: companionLlm, onebot, logger: app.log });
+  const soulLoop = createSoulLoop({
+    db,
+    config,
+    llm,
+    companion: companionLlm,
+    onebot,
+    logger: app.log,
+    onTick: (payload) => {
+      kernel.emit({
+        source: "soul",
+        type: "tick",
+        payload: { ...payload },
+        importance: 30,
+      });
+    },
+  });
   soulLoop.start();
+  kernel.start();
   app.addHook("onClose", async () => {
     triggerTask.stop();
     onebotWatchdog.stop();
     soulLoop.stop();
+    kernel.stop();
   });
 
   registerAdminRoutes(app, { db, config, onebot, hub, llm });
   registerAdminOpsRoutes(app, { db, config, onebot });
   adminChatHub.registerRoute(app);
   registerAdminChatRoutes(app, { db, onebot, hub: adminChatHub, bot });
-  registerSoulRoutes(app, { db, config, llm, loop: soulLoop, logger: app.log });
+  registerSoulRoutes(app, { db, config, llm, loop: soulLoop, agent: kernel, logger: app.log });
   registerOneBotWs(app, {
     config,
     client: onebot,

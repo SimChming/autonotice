@@ -11,6 +11,8 @@ export interface IngestDeps {
   onAtBot: (message: NormalizedMessage) => Promise<void> | void;
   onBoundUserMessage?: (userId: number, message: NormalizedMessage, msgId: number) => void;
   onGroupMessageEvent?: (sessionKey: string, text: string) => void;
+  /** 5.4.0：群里的普通消息（没 @ 她）也进入环境事件总线，由分类器决定要不要注意。 */
+  onGroupAmbientMessage?: (message: NormalizedMessage) => void;
   /** 新群/群信息缺失时补全群名称。 */
   onGroupSeen?: (groupId: string) => void;
   /** 群内绑定码确认成功后，把该群加入用户的群聊列表。 */
@@ -55,6 +57,10 @@ export async function ingestMessage(deps: IngestDeps, message: NormalizedMessage
 
   if (deps.onGroupMessageEvent && message.text.trim()) {
     deps.onGroupMessageEvent(`group:${message.groupId}`, message.text);
+  }
+  // @ 她的消息由 BotChat 走用户回合；这里只把普通群聊作为「环境声」送进闭环。
+  if (deps.onGroupAmbientMessage && !message.isAtBot && message.text.trim()) {
+    deps.onGroupAmbientMessage(message);
   }
 
   if (message.groupId === deps.bindGroupId) {

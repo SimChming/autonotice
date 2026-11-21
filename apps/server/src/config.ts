@@ -49,6 +49,17 @@ const envSchema = z.object({
   // --- 5.3.0：无聊时和本机 llama.cpp 上的模型聊几句 ---
   SOUL_COMPANION_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
   SOUL_COMPANION_PER_DAY: z.coerce.number().int().min(0).max(12).default(3),
+  // --- 5.4.0：仿人闭环：环境 → 触发器/分类器 → 思考 → 效应器 ---
+  SOUL_AGENT_LOOP: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  SOUL_CLASSIFIER_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  SOUL_CLASSIFIER_FALLBACK_CLOUD: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  SOUL_AMBIENT_WAKE_THRESHOLD: z.coerce.number().int().min(0).max(100).default(70),
+  SOUL_SELF_MAX_CONTINUES: z.coerce.number().int().min(1).max(200).default(40),
+  SOUL_SELF_MAX_LEASE_HOURS: z.coerce.number().min(0.1).max(24).default(2),
+  SOUL_FREE_MAX_PER_HOUR: z.coerce.number().int().min(1).max(120).default(12),
 });
 
 export interface Config {
@@ -102,6 +113,13 @@ export interface Config {
     handsMaxPerTick: number;
     companionEnabled: boolean;
     companionPerDay: number;
+    agentLoop: boolean;
+    classifierEnabled: boolean;
+    classifierFallbackCloud: boolean;
+    ambientWakeThreshold: number;
+    selfMaxContinues: number;
+    selfMaxLeaseHours: number;
+    freeMaxPerHour: number;
   };
   hostExec: {
     enabled: boolean;
@@ -170,6 +188,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       handsMaxPerTick: value.SOUL_HANDS_MAX_PER_TICK,
       companionEnabled: value.SOUL_COMPANION_ENABLED,
       companionPerDay: value.SOUL_COMPANION_PER_DAY,
+      agentLoop: value.SOUL_AGENT_LOOP,
+      classifierEnabled: value.SOUL_CLASSIFIER_ENABLED,
+      classifierFallbackCloud: value.SOUL_CLASSIFIER_FALLBACK_CLOUD,
+      ambientWakeThreshold: value.SOUL_AMBIENT_WAKE_THRESHOLD,
+      selfMaxContinues: value.SOUL_SELF_MAX_CONTINUES,
+      selfMaxLeaseHours: value.SOUL_SELF_MAX_LEASE_HOURS,
+      freeMaxPerHour: value.SOUL_FREE_MAX_PER_HOUR,
     },
     hostExec: {
       enabled: value.HOST_EXEC_ENABLED,

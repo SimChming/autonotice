@@ -64,6 +64,13 @@
       "when": 1795230000000,
       "tag": "0008_soul_mood",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795300000000,
+      "tag": "0009_agent_loop",
+      "breakpoints": true
     }
   ]
 }

@@ -323,3 +323,86 @@ export const skills = sqliteTable("skills", {
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+/* ------------------------------------------------------------------ 5.4.0
+ * 仿人闭环：环境事件 → 触发器（分类器决定是否携带信息唤醒）→ 思考 → 效应器 → 环境。
+ * 这四张表把「一次醒来」从内存里的随机掷骰变成可持久化、可打断、可续跑的状态机。
+ */
+
+/** 环境事件流：群消息、私聊、定时 tick、驱力越线、命令输出都从这里进入。 */
+export const agentEvents = sqliteTable("agent_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  source: text("source").notNull(),
+  type: text("type").notNull(),
+  sessionKey: text("session_key"),
+  /** 1 表示这条消息直接指向她（@、私聊、后台聊天）。 */
+  addressed: integer("addressed").notNull().default(0),
+  payload: text("payload").notNull().default("{}"),
+  importance: integer("importance").notNull().default(50),
+  createdAt: integer("created_at").notNull(),
+  consumedAt: integer("consumed_at"),
+});
+
+/**
+ * 触发器：她可以自己建的「环境条件」。
+ * kind=condition 时由条件求值器扫描；条件满足后创建一次激活。
+ */
+export const agentTriggers = sqliteTable("agent_triggers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  kind: text("kind").notNull().default("condition"),
+  sessionKey: text("session_key"),
+  /** 条件 JSON：time / keyword / event / drive / idle / shell。 */
+  condition: text("condition").notNull().default("{}"),
+  /** 条件满足时给她的提示词：她醒来后要围绕什么想。 */
+  prompt: text("prompt").notNull().default(""),
+  enabled: integer("enabled").notNull().default(1),
+  oneShot: integer("one_shot").notNull().default(0),
+  cooldownMs: integer("cooldown_ms").notNull().default(300_000),
+  priority: integer("priority").notNull().default(50),
+  expiresAt: integer("expires_at"),
+  lastCheckedAt: integer("last_checked_at"),
+  lastFiredAt: integer("last_fired_at"),
+  fireCount: integer("fire_count").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+/**
+ * 激活：一次「她真的开始想这件事」的工作会话。
+ * kind=self 是自激触发器：用来维持多轮对话/未完成的工作；
+ * status=sleeping 表示她决定过一会儿接着说，status=done 表示她闭嘴了。
+ */
+export const agentActivations = sqliteTable("agent_activations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionKey: text("session_key"),
+  /** chat 走对话通道；free 走独处思考通道。 */
+  mode: text("mode").notNull().default("free"),
+  /** user | self | condition | event | tick */
+  kind: text("kind").notNull(),
+  triggerId: integer("trigger_id"),
+  eventId: integer("event_id"),
+  status: text("status").notNull().default("active"),
+  task: text("task").notNull().default(""),
+  context: text("context").notNull().default(""),
+  nextRunAt: integer("next_run_at"),
+  leaseUntil: integer("lease_until"),
+  continueCount: integer("continue_count").notNull().default(0),
+  maxContinues: integer("max_continues").notNull().default(40),
+  startedAt: integer("started_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  finishedAt: integer("finished_at"),
+  lastError: text("last_error").notNull().default(""),
+});
+
+/** 每一轮「分类 → 思考 → 效应」的审计记录，后台可以看到她为什么动。 */
+export const agentCycles = sqliteTable("agent_cycles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  activationId: integer("activation_id"),
+  eventId: integer("event_id"),
+  classifier: text("classifier").notNull().default("{}"),
+  thought: text("thought").notNull().default(""),
+  actions: text("actions").notNull().default("[]"),
+  result: text("result").notNull().default(""),
+  createdAt: integer("created_at").notNull(),
+});

@@ -7,6 +7,7 @@ import type { LlmClient } from "../llm/client.js";
 import { writeDailyJournal, evolvePersona } from "./journal.js";
 import { listCommands, runOwnerInstruction } from "./hands.js";
 import type { SoulLoop } from "./idle.js";
+import type { AgentKernel, AgentTriggerSpec } from "./agent/types.js";
 import {
   DRIVE_LABELS,
   KIND_LABELS,
@@ -35,11 +36,12 @@ interface SoulRouteOptions {
   config: Config;
   llm: LlmClient;
   loop: SoulLoop;
+  agent: AgentKernel;
   logger: FastifyBaseLogger;
 }
 
 export function registerSoulRoutes(app: FastifyInstance, options: SoulRouteOptions): void {
-  const { db, config, llm, loop, logger } = options;
+  const { db, config, llm, loop, agent, logger } = options;
 
   app.get("/api/v1/admin/soul/state", async (request, reply) => {
     const claims = await requireAdmin(request, reply);
@@ -268,5 +270,130 @@ export function registerSoulRoutes(app: FastifyInstance, options: SoulRouteOptio
       logger.warn({ err: error }, "手动写日记失败");
       return fail(reply, 500, "internal_error", "写日记失败");
     }
+  });
+
+  /* ------------------------------------------------ 5.4.0 仿人闭环 */
+
+  const parseMaybeJson = (raw: string): unknown => {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return raw;
+    }
+  };
+  const iso = (value: number | null): string | null => (value ? new Date(value).toISOString() : null);
+
+  app.get("/api/v1/admin/soul/agent", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const snap = agent.snapshot();
+    return {
+      activations: snap.activations.map((row) => ({
+        id: row.id,
+        sessionKey: row.sessionKey,
+        mode: row.mode,
+        kind: row.kind,
+        status: row.status,
+        task: row.task,
+        context: row.context,
+        nextRunAt: iso(row.nextRunAt),
+        leaseUntil: iso(row.leaseUntil),
+        continueCount: row.continueCount,
+        maxContinues: row.maxContinues,
+        startedAt: iso(row.startedAt),
+        updatedAt: iso(row.updatedAt),
+        finishedAt: iso(row.finishedAt),
+        lastError: row.lastError,
+      })),
+      triggers: snap.triggers.map((row) => ({
+        id: row.id,
+        name: row.name,
+        kind: row.kind,
+        sessionKey: row.sessionKey,
+        condition: parseMaybeJson(row.condition),
+        prompt: row.prompt,
+        enabled: row.enabled === 1,
+        oneShot: row.oneShot === 1,
+        cooldownMs: row.cooldownMs,
+        priority: row.priority,
+        lastFiredAt: iso(row.lastFiredAt),
+        fireCount: row.fireCount,
+      })),
+      cycles: snap.cycles.map((row) => ({
+        id: row.id,
+        activationId: row.activationId,
+        eventId: row.eventId,
+        classifier: parseMaybeJson(row.classifier),
+        thought: row.thought,
+        actions: parseMaybeJson(row.actions),
+        result: row.result,
+        at: iso(row.createdAt),
+      })),
+      events: snap.events.map((row) => ({
+        id: row.id,
+        source: row.source,
+        type: row.type,
+        sessionKey: row.sessionKey,
+        addressed: row.addressed === 1,
+        payload: parseMaybeJson(row.payload),
+        importance: row.importance,
+        at: iso(row.createdAt),
+      })),
+      config: {
+        agentLoop: config.soul.agentLoop,
+        classifierEnabled: config.soul.classifierEnabled,
+        ambientWakeThreshold: config.soul.ambientWakeThreshold,
+        selfMaxContinues: config.soul.selfMaxContinues,
+        selfMaxLeaseHours: config.soul.selfMaxLeaseHours,
+        freeMaxPerHour: config.soul.freeMaxPerHour,
+      },
+    };
+  });
+
+  app.post("/api/v1/admin/soul/agent/trigger", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const body = (request.body ?? {}) as Partial<AgentTriggerSpec>;
+    const condition = body.condition as Record<string, unknown> | undefined;
+    if (!body.name?.trim() || !condition || typeof condition.type !== "string") {
+      return fail(reply, 400, "invalid_request", "触发器需要名字和条件类型");
+    }
+    const row = agent.addTrigger({
+      name: body.name.trim(),
+      condition: body.condition as AgentTriggerSpec["condition"],
+      prompt: body.prompt ?? "",
+      sessionKey: body.sessionKey ?? null,
+      oneShot: body.oneShot === true,
+      cooldownMs: Number(body.cooldownMs) || undefined,
+      priority: Number(body.priority) || undefined,
+    });
+    return { ok: true, id: row.id };
+  });
+
+  app.post("/api/v1/admin/soul/agent/activation/:id/cancel", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const id = Number((request.params as { id?: string }).id);
+    if (!Number.isFinite(id)) {
+      return fail(reply, 400, "invalid_request", "id 不合法");
+    }
+    agent.cancelActivation(id);
+    return { ok: true };
+  });
+
+  app.post("/api/v1/admin/soul/agent/wake", async (request, reply) => {
+    const claims = await requireAdmin(request, reply);
+    if (!claims) {
+      return;
+    }
+    const body = (request.body ?? {}) as { prompt?: string; sessionKey?: string };
+    agent.wake(body.prompt ?? "", body.sessionKey ?? null);
+    return { ok: true };
   });
 }

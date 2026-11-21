@@ -45,6 +45,13 @@ export interface SoulDeps {
   companion: LlmClient;
   onebot: OneBotClient;
   logger: FastifyBaseLogger;
+  /** 5.4.0：把「她醒了」交给仿人闭环内核，由触发器和分类器决定下一步。 */
+  onTick?: (payload: {
+    quiet: boolean;
+    hour: number;
+    topDrive?: string;
+    topLevel?: number;
+  }) => void;
 }
 
 type Activity = "hot" | "browse" | "monologue" | "talk" | "rest" | "hands" | "companion";
@@ -143,7 +150,7 @@ ${experience.slice(0, 800)}
 }
 
 /** 看热搜：优先挑和她正在惦记的事相关的那条。 */
-async function activityHot(deps: SoulDeps, intention: IntentionRow | null): Promise<void> {
+export async function activityHot(deps: SoulDeps, intention: IntentionRow | null): Promise<void> {
   const topics = await fetchHotTopics(6, deps.logger);
   if (!topics.length) {
     return;
@@ -172,7 +179,7 @@ async function activityHot(deps: SoulDeps, intention: IntentionRow | null): Prom
 }
 
 /** 上网冲浪：如果心里有没搞懂的问题，就顺着它继续查。 */
-async function activityBrowse(deps: SoulDeps, intention: IntentionRow | null): Promise<void> {
+export async function activityBrowse(deps: SoulDeps, intention: IntentionRow | null): Promise<void> {
   const today = listReadings(deps.db, dayKey(), 20);
   const topics: Topic[] = today.map((row) => ({
     source: row.source,
@@ -212,7 +219,7 @@ async function activityBrowse(deps: SoulDeps, intention: IntentionRow | null): P
 }
 
 /** 自言自语：承接上一次的思绪，而不是每次重新发呆。 */
-async function activityMonologue(deps: SoulDeps, intention: IntentionRow | null): Promise<void> {
+export async function activityMonologue(deps: SoulDeps, intention: IntentionRow | null): Promise<void> {
   const recent = listEvents(deps.db, 5)
     .filter((row) => row.kind === "monologue" || row.kind === "reflect")
     .map((row) => `- ${row.content.slice(0, 120)}`)
@@ -228,7 +235,7 @@ async function activityMonologue(deps: SoulDeps, intention: IntentionRow | null)
 }
 
 /** 主动找主人说话（每天有上限，且不打扰安静时段）。 */
-async function activityTalk(deps: SoulDeps, intention: IntentionRow | null): Promise<void> {
+export async function activityTalk(deps: SoulDeps, intention: IntentionRow | null): Promise<void> {
   const { db, config, onebot, logger } = deps;
   const day = dayKey();
   if (talkedTodayCount(db, day) >= config.soul.talkPerDay) {
@@ -260,7 +267,7 @@ async function activityTalk(deps: SoulDeps, intention: IntentionRow | null): Pro
 }
 
 /** 累了就歇一会儿：什么都不产出，只是把「累」降下去。 */
-async function activityRest(deps: SoulDeps): Promise<void> {
+export async function activityRest(deps: SoulDeps): Promise<void> {
   const soul = getSoulSnapshot(deps.db);
   patchSoulSnapshot(deps.db, { energy: Math.min(100, soul.energy + 8) });
   addEvent(deps.db, "rest", "什么都没做，就那样待着，发了一会儿呆。");
@@ -364,7 +371,21 @@ export function createSoulLoop(deps: SoulDeps) {
         patchSoulSnapshot(db, { energy: soul.energy + 4 });
       }
 
-      // 5. 决定这次要不要动、动什么
+      // 5.0：5.4.0 起，她醒来的这一刻不再由这里掷骰子决定做什么，
+      // 而是把「环境 + 驱力」交给闭环内核：触发器/分类器 → 思考 → 效应器。
+      if (config.soul.agentLoop && deps.onTick) {
+        const topNow = topDrives(db, 1)[0];
+        deps.onTick({
+          quiet,
+          hour,
+          topDrive: topNow?.name,
+          topLevel: topNow?.level,
+        });
+        patchSoulSnapshot(db, { lastWakeAt: Date.now() });
+        return;
+      }
+
+      // 5. 决定这次要不要动、动什么（SOUL_AGENT_LOOP=false 的旧路径）
       const top = topDrives(db, 1)[0];
       // 什么都不太想、却也没在休息：无聊本身也是一种要做点什么的理由。
       const bored = (top?.level ?? 0) < 22;

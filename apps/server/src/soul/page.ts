@@ -7,7 +7,7 @@ export const SOUL_PAGE_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>鲸鱼娘 · 5.3.0</title>
+<title>鲸鱼娘 · 5.2.0</title>
 <style>
   :root {
     --bg: #0f1220; --panel: #171b2e; --panel-2: #1e2439; --line: #2a3150;
@@ -96,7 +96,7 @@ export const SOUL_PAGE_HTML = `<!doctype html>
 </head>
 <body>
 <header>
-  <h1>🐋 鲸鱼娘 <span>· 5.3.0</span></h1>
+  <h1>🐋 鲸鱼娘 <span>· 5.2.0</span></h1>
   <div>
     <button id="btn-tick" hidden>让她活动一下</button>
     <button id="btn-journal" hidden>现在写日记</button>
@@ -163,6 +163,10 @@ export const SOUL_PAGE_HTML = `<!doctype html>
         <div class="card">
           <h3>她最近在做的事</h3>
           <div class="feed" id="events"><div class="empty">还没有</div></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h3>意识循环（环境 → 触发器 → 思考 → 效应器）</h3>
+          <div class="feed" id="agent"><div class="empty">还没有循环记录</div></div>
         </div>
       </div>
     </div>
@@ -339,12 +343,52 @@ export const SOUL_PAGE_HTML = `<!doctype html>
     });
   }
 
+  function loadAgent() {
+    return api("/api/v1/admin/soul/agent").then(function (data) {
+      var box = el("agent");
+      var parts = [];
+      var acts = (data.activations || []).slice(0, 4);
+      if (acts.length) {
+        parts.push('<div class="feed-src">当前激活</div>');
+        parts = parts.concat(acts.map(function (a) {
+          var when = a.nextRunAt ? " · 下次 " + fmt(a.nextRunAt) : "";
+          return '<div class="feed-item"><div class="feed-sum">' +
+            '<span class="tag">' + esc(a.kind + "/" + a.status) + '</span> ' + esc(a.task.slice(0, 90)) +
+            '</div><div class="feed-src">续跑 ' + a.continueCount + '/' + a.maxContinues + when +
+            (a.lastError ? ' · ' + esc(a.lastError.slice(0, 60)) : '') + '</div></div>';
+        }));
+      }
+      var triggers = (data.triggers || []).slice(0, 5);
+      if (triggers.length) {
+        parts.push('<div class="feed-src" style="margin-top:8px">条件触发器</div>');
+        parts = parts.concat(triggers.map(function (t) {
+          var cond = t.condition && t.condition.type ? t.condition.type : "?";
+          return '<div><span class="tag">' + esc(cond) + '</span>' + esc(t.name) +
+            (t.enabled ? '' : '（已停用）') + '</div>';
+        }));
+      }
+      var cycles = (data.cycles || []).slice(0, 4);
+      if (cycles.length) {
+        parts.push('<div class="feed-src" style="margin-top:8px">最近几轮</div>');
+        parts = parts.concat(cycles.map(function (c) {
+          var decision = c.classifier && c.classifier.decision ? c.classifier.decision : "think";
+          var thought = c.thought ? esc(c.thought.slice(0, 90)) : "";
+          var result = c.result ? esc(String(c.result).slice(0, 100)) : "";
+          return '<div class="feed-item"><div class="feed-sum"><span class="tag">' + esc(decision) + '</span> ' +
+            (thought || result) + '</div></div>';
+        }));
+      }
+      box.innerHTML = parts.length ? parts.join("") : '<div class="empty">还没有循环记录</div>';
+    });
+  }
+
   function refresh() {
     loadState().catch(function () {});
     loadJournals().catch(function () {});
     loadReadings().catch(function () {});
     loadEvents().catch(function () {});
     loadCommands().catch(function () {});
+    loadAgent().catch(function () {});
   }
 
   el("btn-login").addEventListener("click", function () {

@@ -6,6 +6,11 @@ import type { Db } from "../db/client.js";
 import type { LlmClient, LlmMessage } from "../llm/client.js";
 import type { NotifyHub } from "../notify/hub.js";
 import type { OneBotClient } from "../onebot/client.js";
+import type {
+  AgentChatHooks,
+  AgentTriggerSpec,
+  ChatRunResult,
+} from "../soul/agent/types.js";
 import { buildSystemPrompt } from "./persona.js";
 import { appendHistory, loadGroupContext, loadGroupContextSince, loadRecentHistory, loadSummary, maybeSummarize } from "./history.js";
 import { recallMemories, saveMemory } from "./memory.js";
@@ -21,6 +26,16 @@ import {
 } from "../services/reply-quota.js";
 
 const RATE_WINDOW_MS = 5 * 60 * 1000;
+
+const triggerSpecSchema = z.object({
+  name: z.string().default("未命名触发器"),
+  condition: z.record(z.unknown()),
+  prompt: z.string().default(""),
+  sessionKey: z.string().nullable().optional(),
+  oneShot: z.boolean().optional(),
+  cooldownMs: z.number().optional(),
+  priority: z.number().optional(),
+});
 
 const contractSchema = z.object({
   reply: z.string().default(""),
@@ -39,6 +54,13 @@ const contractSchema = z.object({
     .nullable()
     .optional(),
   followups: z.array(z.string()).nullable().optional(),
+  // 5.4.0：自激触发器与条件触发器。continueLater 表示这轮说完后过一会儿接着做。
+  continueLater: z.boolean().default(false),
+  nextInSeconds: z.coerce.number().default(45),
+  task: z.string().default(""),
+  context: z.string().default(""),
+  thought: z.string().default(""),
+  triggers: z.array(triggerSpecSchema).default([]),
 });
 
 export type BotContract = z.infer<typeof contractSchema>;
@@ -51,6 +73,10 @@ export interface ChatInput {
   groupId?: string;
   /** OneBot 消息 id，仅用于排重与调试。 */
   messageId?: string;
+  /** true 表示这是她自己的续跑/条件触发，不是用户新消息。 */
+  internal?: boolean;
+  /** 内核为这次回合创建的激活 id。 */
+  activationId?: number;
   send: (text: string) => Promise<void>;
 }
 
@@ -68,6 +94,8 @@ export interface ChatDeps {
   hub: NotifyHub;
   onebot: OneBotClient;
   logger: FastifyBaseLogger;
+  /** 5.4.0：把对话回合接入仿人闭环（自激续跑、用户插话抢占、条件触发器）。 */
+  agent?: AgentChatHooks;
 }
 
 const FALLBACK_REPLY = "🐋 呜…脑子突然卡住了，等下再试喵~";
@@ -163,8 +191,18 @@ export class BotChat {
     }
   }
 
-  async handle(input: ChatInput): Promise<void> {
+  async handle(input: ChatInput): Promise<ChatRunResult | null> {
     const key = input.sessionKey;
+    if (!input.internal) {
+      // 用户一插话，先让内核取消她正在进行的自激续跑；真正开始回答时再建激活。
+      this.deps.agent?.noteUserMessage({
+        sessionKey: key,
+        groupId: input.groupId,
+        senderQq: input.senderQq,
+        text: input.text,
+      });
+    }
+
     const pending = this.inbox.get(key);
     if (pending) {
       pending.push(input);
@@ -174,10 +212,11 @@ export class BotChat {
 
     // 已有回合在跑：新消息会被那个回合在下一轮看到，不再单独排队等待。
     if (this.running.has(key)) {
-      return;
+      return null;
     }
 
     this.running.add(key);
+    let last: ChatRunResult | null = null;
     try {
       for (;;) {
         const batch = this.inbox.get(key);
@@ -192,7 +231,14 @@ export class BotChat {
           senderName: item.senderName,
         }));
         try {
-          await this.handleOnce(primary, extras);
+          const result = await this.handleOnce(
+            primary,
+            extras,
+            primary.internal ? primary.activationId : undefined,
+          );
+          result.sessionKey = key;
+          last = result;
+          this.deps.agent?.endTurn(result, primary.internal === true);
         } catch (error) {
           this.deps.logger.error({ err: error, sessionKey: key }, "对话处理失败");
         }
@@ -200,14 +246,52 @@ export class BotChat {
     } finally {
       this.running.delete(key);
     }
+    return last;
   }
 
-  private async handleOnce(input: ChatInput, extras: ExtraMessage[]): Promise<void> {
-    const { db, config, llm, logger, hub } = this.deps;
+  /** 内核用它避免在她说话时插入另一轮续跑。 */
+  isRunning(sessionKey: string): boolean {
+    return this.running.has(sessionKey);
+  }
 
-    if (!this.allowed(input.senderQq)) {
+  /** 自激续跑/条件触发：用一句内部提示唤醒同一个对话，而不是伪造用户消息。 */
+  async resume(input: {
+    sessionKey: string;
+    groupId?: string;
+    note: string;
+    send: (text: string) => Promise<void>;
+    activationId?: number;
+  }): Promise<ChatRunResult> {
+    const result = await this.handle({
+      sessionKey: input.sessionKey,
+      senderQq: OWNER_QQ,
+      senderName: "主人",
+      text: input.note,
+      groupId: input.groupId,
+      send: input.send,
+      internal: true,
+      activationId: input.activationId,
+    });
+    return (
+      result ?? {
+        sessionKey: input.sessionKey,
+        activationId: input.activationId,
+        sent: 0,
+      }
+    );
+  }
+
+  private async handleOnce(
+    input: ChatInput,
+    extras: ExtraMessage[],
+    activationId?: number,
+  ): Promise<ChatRunResult> {
+    const { db, config, llm, logger, hub, agent } = this.deps;
+    const internal = input.internal === true;
+
+    if (!internal && !this.allowed(input.senderQq)) {
       await input.send(RATE_LIMIT_REPLY);
-      return;
+      return { sessionKey: input.sessionKey, sent: 1 };
     }
 
     const owner = isOwner(input.senderQq);
@@ -216,9 +300,21 @@ export class BotChat {
     const rawLimit = limitForScope(getReplyQuota(db), scope);
     const maxSends = rawLimit === 0 ? Number.POSITIVE_INFINITY : rawLimit;
     const maxRounds = roundsForScope(scope);
-    const identity = owner
-      ? "主人（唯一指定 QQ 3874095145，把你养大的人）"
-      : `对方（QQ${input.senderQq}，昵称 ${input.senderName || "未知"}）`;
+    const identity = internal
+      ? "你自己（这不是用户发来的新消息，是你自己决定继续之前的事）"
+      : owner
+        ? "主人（唯一指定 QQ 3874095145，把你养大的人）"
+        : `对方（QQ${input.senderQq}，昵称 ${input.senderName || "未知"}）`;
+    // 外部用户回合在真正开始时建激活；内部续跑沿用内核传进来的激活。
+    const activeId = internal
+      ? activationId
+      : agent?.beginUserTurn({
+          sessionKey: input.sessionKey,
+          groupId: input.groupId,
+          senderQq: input.senderQq,
+          text: input.text,
+        });
+    let sawNewMessages = extras.length > 0;
 
     // 先读取历史（此时不含本条消息），避免同一条消息在 prompt 里出现两次。
     const history = loadRecentHistory(db, input.sessionKey);
@@ -269,7 +365,10 @@ export class BotChat {
     ];
 
     // prompt 构建完成后再落库，保证本轮消息不会重复出现在历史里。
-    appendHistory(db, input.sessionKey, "user", input.senderQq, input.text);
+    // 内部续跑的那句提示不是用户消息，不写进历史；但回答期间真的来了用户消息要写。
+    if (!internal) {
+      appendHistory(db, input.sessionKey, "user", input.senderQq, input.text);
+    }
     for (const extra of extras) {
       appendHistory(db, input.sessionKey, "user", extra.senderQq, extra.text);
     }
@@ -308,6 +407,7 @@ export class BotChat {
     };
 
     let memory: BotContract["memory"] = null;
+    let lastContract: BotContract | null = null;
 
     for (let round = 0; round < maxRounds; round += 1) {
       // 每轮开始前先看一眼：群聊取比上次更新、且不是自己发的消息；
@@ -316,6 +416,7 @@ export class BotChat {
         const freshGroup = loadGroupContextSince(db, input.groupId, lastGroupMessageId, 10)
           .filter((entry) => entry.senderLabel !== "鲸鱼娘" && entry.text.trim());
         if (freshGroup.length) {
+          sawNewMessages = true;
           lastGroupMessageId = freshGroup[freshGroup.length - 1]!.id;
           for (const entry of freshGroup) {
             appendHistory(db, input.sessionKey, "user", entry.senderQq, entry.text);
@@ -335,6 +436,7 @@ export class BotChat {
       } else {
         const fresh = this.drainInbox(input.sessionKey);
         if (fresh.length) {
+          sawNewMessages = true;
           for (const item of fresh) {
             appendHistory(db, input.sessionKey, "user", item.senderQq, item.text);
           }
@@ -369,6 +471,7 @@ export class BotChat {
         break;
       }
 
+      lastContract = contract;
       if (contract.memory?.content) {
         memory = contract.memory;
       }
@@ -452,10 +555,12 @@ export class BotChat {
       break;
     }
 
-    if (!outgoing.length) {
+    if (!outgoing.length && !internal) {
       await sendOnce("🐋 鲸鱼娘记住啦～");
     }
-    appendHistory(db, input.sessionKey, "assistant", null, outgoing.join("\n") || "🐋 鲸鱼娘记住啦～");
+    if (outgoing.length) {
+      appendHistory(db, input.sessionKey, "assistant", null, outgoing.join("\n"));
+    }
 
     if (memory?.content) {
       try {
@@ -466,5 +571,23 @@ export class BotChat {
     }
 
     void maybeSummarize(db, llm, input.sessionKey, logger);
+
+    const pending = lastContract?.continueLater
+      ? {
+          task: lastContract.task.trim() || input.text.slice(0, 300),
+          nextInSeconds: Math.min(300, Math.max(20, Math.round(lastContract.nextInSeconds || 45))),
+          context: lastContract.context.trim() || undefined,
+        }
+      : undefined;
+    const triggers = (lastContract?.triggers ?? []) as AgentTriggerSpec[];
+    return {
+      activationId: activeId,
+      sessionKey: input.sessionKey,
+      pending,
+      triggers,
+      thought: lastContract?.thought,
+      preempted: sawNewMessages,
+      sent: outgoing.length,
+    };
   }
 }

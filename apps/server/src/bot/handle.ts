@@ -7,6 +7,7 @@ import type { NotifyHub } from "../notify/hub.js";
 import type { OneBotClient } from "../onebot/client.js";
 import { messages } from "../db/schema.js";
 import type { NormalizedMessage, NormalizedPrivateMessage } from "../onebot/normalize.js";
+import type { AgentChatHooks } from "../soul/agent/types.js";
 import { BotChat } from "./chat.js";
 
 interface HandlerOptions {
@@ -18,6 +19,8 @@ interface HandlerOptions {
   logger: FastifyBaseLogger;
   /** 私聊消息与回复镜像到管理后台聊天（QQ 不可用时的备用通道）。 */
   mirrorPrivate?: (message: { role: "user" | "assistant"; text: string; qq: string; at: string }) => void;
+  /** 5.4.0：对话接入仿人闭环。 */
+  agent?: AgentChatHooks;
 }
 
 /** 群内 @ 与私聊统一走鲸鱼娘对话；权限与限流在 BotChat 内强制。 */
