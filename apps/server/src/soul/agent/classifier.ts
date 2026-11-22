@@ -3,6 +3,7 @@ import type { Config } from "../../config.js";
 import type { Db } from "../../db/client.js";
 import type { LlmClient } from "../../llm/client.js";
 import { getSoulSnapshot } from "../store.js";
+import type { DecisionClassifier } from "./decision.js";
 import { eventPayload, recentEventsText } from "./store.js";
 import type {
   AgentActivationRow,
@@ -17,6 +18,8 @@ export interface ClassifierDeps {
   config: Config;
   /** 本地小模型：默认的注意力过滤器。 */
   classifier: LlmClient;
+  /** Jev 风格决策模型：一次前向、零生成，优先于聊天模型。 */
+  decision?: DecisionClassifier;
   /** 本地不可用时的云端兜底。 */
   fallback?: LlmClient;
   logger: FastifyBaseLogger;
@@ -172,6 +175,14 @@ export async function classifyAttention(
   }
   if (!input.candidates.length && !input.active) {
     return fast;
+  }
+
+  // 决策模型：单次前向、不生成任何 token，直接给出概率与档位。
+  if (deps.config.soul.decisionEnabled && deps.decision) {
+    const decided = await deps.decision.decide(input);
+    if (decided) {
+      return decided;
+    }
   }
 
   const soul = getSoulSnapshot(deps.db);

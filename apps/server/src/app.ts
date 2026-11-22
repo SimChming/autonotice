@@ -30,6 +30,7 @@ import { createSoulLoop } from "./soul/idle.js";
 import { registerSoulRoutes } from "./soul/routes.js";
 import { SOUL_PAGE_HTML } from "./soul/page.js";
 import { createAgentKernel } from "./soul/agent/kernel.js";
+import { createDecisionClassifier } from "./soul/agent/decision.js";
 
 /**
  * 装配 Fastify 实例。路由层只做：鉴权 → zod 校验 → 调服务 → 返回（§4.4）。
@@ -64,6 +65,13 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   const companionLlm = createLlmClient(() => getCompanionLlm(db, config));
   // 5.4.0：注意力分类器也走本地小模型，主要对话仍然用云端。
   const classifierLlm = createLlmClient(() => getCompanionLlm(db, config));
+  // 5.5.0：Jev 风格决策模型，一次前向、零 token；不可用时退回上面的聊天模型。
+  const decisionClassifier = createDecisionClassifier({
+    db,
+    baseUrl: config.llm.decisionBaseUrl,
+    model: config.llm.decisionModel || undefined,
+    logger: app.log,
+  });
   // 密钥一旦泄露就应视为已泄露：启动时提醒轮换（只比对指纹，不打印密钥）。
   warnIfLeakedKey([config.llm.apiKey, getCloudLlm(db, config).apiKey], app.log);
   const hub = new NotifyHub(app.log);
@@ -73,6 +81,7 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     config,
     llm,
     classifier: classifierLlm,
+    decision: decisionClassifier,
     companion: companionLlm,
     onebot,
     logger: app.log,

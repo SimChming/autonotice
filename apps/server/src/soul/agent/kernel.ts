@@ -7,6 +7,7 @@ import type { OneBotClient } from "../../onebot/client.js";
 import { DRIVE_LABELS, getDrives, topDrives, type DriveName } from "../life.js";
 import { addEvent, getSoulSnapshot, hourKey, patchSoulSnapshot } from "../store.js";
 import { classifyAttention } from "./classifier.js";
+import type { DecisionClassifier } from "./decision.js";
 import { groupIdOf, sendToSession } from "./channel.js";
 import { executeActions, parseActions, parseTriggerSpecs, parseLoose } from "./effectors.js";
 import { buildAgentPrompt } from "./prompt.js";
@@ -55,6 +56,7 @@ export interface AgentKernelDeps {
   config: Config;
   llm: LlmClient;
   classifier: LlmClient;
+  decision?: DecisionClassifier;
   companion: LlmClient;
   onebot: OneBotClient;
   logger: FastifyBaseLogger;
@@ -676,13 +678,13 @@ export function createAgentKernel(deps: AgentKernelDeps): AgentKernel {
       return;
     }
 
-    const soul = getSoulSnapshot(db);
     const quiet = inQuietHour(hourKey(), config.soul.quietStart, config.soul.quietEnd);
     const classified = await classifyAttention(
       {
         db,
         config,
         classifier: deps.classifier,
+        decision: deps.decision,
         fallback: llm,
         logger,
       },

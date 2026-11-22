@@ -60,6 +60,10 @@ const envSchema = z.object({
   SOUL_SELF_MAX_CONTINUES: z.coerce.number().int().min(1).max(200).default(40),
   SOUL_SELF_MAX_LEASE_HOURS: z.coerce.number().min(0.1).max(24).default(2),
   SOUL_FREE_MAX_PER_HOUR: z.coerce.number().int().min(1).max(120).default(12),
+  // --- 5.5.0：Jev 风格本地决策模型（/v1/systemone，一次前向、零生成） ---
+  SOUL_DECISION_ENABLED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  LLM_DECISION_BASE_URL: z.string().default("http://host.docker.internal:18082"),
+  LLM_DECISION_MODEL: z.string().default(""),
 });
 
 export interface Config {
@@ -87,6 +91,8 @@ export interface Config {
     visionModel: string;
     localBaseUrl: string;
     localModel: string;
+    decisionBaseUrl: string;
+    decisionModel: string;
   };
   admin: {
     username: string;
@@ -120,6 +126,7 @@ export interface Config {
     selfMaxContinues: number;
     selfMaxLeaseHours: number;
     freeMaxPerHour: number;
+    decisionEnabled: boolean;
   };
   hostExec: {
     enabled: boolean;
@@ -162,6 +169,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       visionModel: value.LLM_VISION_MODEL,
       localBaseUrl: value.LLM_LOCAL_BASE_URL,
       localModel: value.LLM_LOCAL_MODEL,
+      decisionBaseUrl: value.LLM_DECISION_BASE_URL,
+      decisionModel: value.LLM_DECISION_MODEL,
     },
     admin: {
       username: value.ADMIN_USERNAME,
@@ -195,6 +204,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       selfMaxContinues: value.SOUL_SELF_MAX_CONTINUES,
       selfMaxLeaseHours: value.SOUL_SELF_MAX_LEASE_HOURS,
       freeMaxPerHour: value.SOUL_FREE_MAX_PER_HOUR,
+      decisionEnabled: value.SOUL_DECISION_ENABLED,
     },
     hostExec: {
       enabled: value.HOST_EXEC_ENABLED,
